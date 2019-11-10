@@ -1,8 +1,8 @@
 ![image](https://user-images.githubusercontent.com/3355654/67166690-3cd7f100-f357-11e9-953f-561864f26fc1.png)
 
-## What is TWX Proxy?
+## What is TWX Proxy 3?
 
-**TWX Proxy** is a [TradeWars 2002 (TW2002)](http://www.eisonline.com) helper ported from Deplhi to C# by Microblaster and Shadow.
+**TWX Proxy 3** or TWX3 is a [TradeWars 2002 (TW2002)](http://www.eisonline.com) helper ported from Deplhi to C# by Microblaster and Shadow.
 
 Originally written by Remco Mulder, and Elder Prophit. We are proud to finally bring this application to a modern platform so that development can continue.
 
