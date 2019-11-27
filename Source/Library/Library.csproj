@@ -31,9 +31,13 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>Resources\TWXP-2.ico</ApplicationIcon>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Core" />
@@ -48,6 +52,11 @@
     <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Icons.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Icons.resx</DependentUpon>
+    </Compile>
     <Compile Include="Scripts\twscript\Commands.cs" />
     <Compile Include="Database\Games.cs" />
     <Compile Include="Database\Ports.cs" />
@@ -77,15 +86,63 @@
     <Compile Include="Terminal\Proxy.cs" />
     <Compile Include="Terminal\TelnetClient.cs" />
     <Compile Include="Terminal\TelnetServer.cs" />
+    <EmbeddedResource Include="Icons.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>Icons.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
+      <Generator>PublicResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
     </EmbeddedResource>
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
     </None>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Resource Include="Resources\ICE9-1.ico" />
+    <Resource Include="Resources\ICE9-2.ico" />
+    <Resource Include="Resources\ICE9-3.ico" />
+    <Resource Include="Resources\ICE9-4.ico" />
+    <Resource Include="Resources\ICE9-5.ico" />
+    <Resource Include="Resources\ICE9-6.ico" />
+    <Resource Include="Resources\ICE9-7.ico" />
+    <Resource Include="Resources\ICE9-8.ico" />
+    <Resource Include="Resources\icon10.ico" />
+    <Resource Include="Resources\icon11.ico" />
+    <Resource Include="Resources\icon12.ico" />
+    <Resource Include="Resources\icon13.ico" />
+    <Resource Include="Resources\icon14.ico" />
+    <Resource Include="Resources\icon15.ico" />
+    <Resource Include="Resources\icon16.ico" />
+    <Resource Include="Resources\icon17.ico" />
+    <Resource Include="Resources\icon18.ico" />
+    <Resource Include="Resources\icon19.ico" />
+    <Resource Include="Resources\icon20.ico" />
+    <Resource Include="Resources\icon21.ico" />
+    <Resource Include="Resources\icon22.ico" />
+    <Resource Include="Resources\icon23.ico" />
+    <Resource Include="Resources\icon9.ico" />
+    <Resource Include="Resources\multicolor.ico" />
+    <Resource Include="Resources\proxy-b.ico" />
+    <Resource Include="Resources\proxy-c.ico" />
+    <Resource Include="Resources\proxy-g.ico" />
+    <Resource Include="Resources\proxy-m.ico" />
+    <Resource Include="Resources\proxy-r.ico" />
+    <Resource Include="Resources\proxy-y.ico" />
+    <Resource Include="Resources\proxy.ico" />
+    <Resource Include="Resources\TWXP-1.ico" />
+    <Resource Include="Resources\TWXP-2.ico" />
+    <Resource Include="Resources\TWXP-3.ico" />
+    <Resource Include="Resources\TWXP-4.ico" />
+    <Resource Include="Resources\TWXP-5.ico" />
+    <Resource Include="Resources\TWXP-6.ico" />
+    <Resource Include="Resources\TWXP-7.ico" />
+    <Resource Include="Resources\TWXP-8.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Icon1.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

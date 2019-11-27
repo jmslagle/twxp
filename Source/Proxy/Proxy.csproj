@@ -34,9 +34,17 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>Resources\proxy.ico</ApplicationIcon>
+  </PropertyGroup>
+  <PropertyGroup>
+    <Win32Resource>
+    </Win32Resource>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Core" />
@@ -89,7 +97,7 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
     <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
+      <Generator>PublicResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
     <None Include="Properties\Settings.settings">
@@ -132,6 +140,30 @@
       <Project>{3e65ce1e-a0fa-49c3-9963-e65f17982754}</Project>
       <Name>Library</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\proxy-b.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\proxy-c.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\proxy-g.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\proxy-m.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\proxy-r.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\proxy-y.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\proxy.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\proxy_g.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
