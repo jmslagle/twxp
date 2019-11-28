@@ -79,8 +79,9 @@ namespace TWX3
 
         private void onTreviewChange(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            ServerGrid.Visibility = Visibility.Hidden;
+            GameGrid.Visibility = Visibility.Hidden;
             LoginGrid.Visibility = Visibility.Hidden;
+            BbsGrid.Visibility = Visibility.Hidden;
             QwkLyncGrid.Visibility = Visibility.Hidden;
             SecurityGrid.Visibility = Visibility.Hidden;
             TerminalGrid.Visibility = Visibility.Hidden;
@@ -94,20 +95,20 @@ namespace TWX3
                     if (Item1 != null) Item1.IsSelected = true;
                     break;
 
-                case "Server / Game":
-                    ServerGrid.Visibility = Visibility.Visible;
+                case "Game":
+                    GameGrid.Visibility = Visibility.Visible;
                     break;
 
-                case "Login / Corp":
+                case "Login":
                     LoginGrid.Visibility = Visibility.Visible;
                     break;
 
-                case "QwkLync / BBS":
-                    QwkLyncGrid.Visibility = Visibility.Visible;
+                case "BBS":
+                    BbsGrid.Visibility = Visibility.Visible;
                     break;
 
-                case "Security":
-                    SecurityGrid.Visibility = Visibility.Visible;
+                case "QwkLync":
+                    QwkLyncGrid.Visibility = Visibility.Visible;
                     break;
 
                 case "Global":
@@ -115,11 +116,11 @@ namespace TWX3
                     if (Item2 != null) Item2.IsSelected = true;
                     break;
 
-                case "Terminal/Remote":
+                case "Terminal":
                     TerminalGrid.Visibility = Visibility.Visible;
                     break;
 
-                case "Logging/AutoRun":
+                case "Logging":
                     LoggingGrid.Visibility = Visibility.Visible;
                     break;
             }

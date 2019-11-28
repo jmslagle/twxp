@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using TWXP;
+
 
 namespace TWX3
 {
@@ -13,8 +15,9 @@ namespace TWX3
     /// </summary>
     public partial class Main : Window
     {
+        System.Windows.Forms.NotifyIcon notifyicon;
+        Window popup = new Popup();
 
-        //private Scripts scripts;
         private Proxy proxy;
 
         public Proxy Proxy { get => proxy; set => proxy = value; }
@@ -28,7 +31,7 @@ namespace TWX3
             //proxy.Scripts.Load(@"scripts\zed-bot.vb");
             //proxy.Scripts.Load(@"scripts\zed-bot.cs");
 
-            //this.Hide();
+            this.Hide();
 
             Window welcome = new Welcome();
             welcome.ShowDialog();
@@ -53,7 +56,58 @@ namespace TWX3
             //Stream iconStream = Application.GetResourceStream(new Uri("pack://application:,,,/YourReferencedAssembly;component/YourPossibleSubFolder/YourResourceFile.ico")).Stream;
             //icon.Icon = new System.Drawing.Icon(iconStream);
 
+            notifyicon = new System.Windows.Forms.NotifyIcon();
+            //icon.Icon = new System.Drawing.Icon(@"C:\Projects\TradeWars\TWX-Sharp\Source\Proxy\Resources\proxy.ico");
+            using (Stream iconStream = Application.GetResourceStream(new Uri("pack://application:,,,/TWX3;component/Resources/notify00.ico")).Stream)
+            {
+                notifyicon.Icon = new System.Drawing.Icon(iconStream);
+            }
 
+            notifyicon.MouseClick += MouseClick;
+            notifyicon.DoubleClick += NotifyDoubleClick;
+
+            notifyicon.Visible = true;
+            //notifyicon.BalloonTipText = "Hello from My Kitten";
+            //notifyicon.BalloonTipTitle = "Cat Talk";
+            //notifyicon.BalloonTipIcon = System.Windows.Forms.ToolTipIcon.Info;
+            //notifyicon.ShowBalloonTip(2000);
+
+
+        }
+
+        private void MouseClick(object sender, System.Windows.Forms.MouseEventArgs e)
+        {
+            if(e.Button == System.Windows.Forms.MouseButtons.Left)
+            {
+
+            }
+            else
+            {
+                popup.Top = System.Windows.SystemParameters.PrimaryScreenHeight - popup.Height - 32;
+                popup.Left = System.Windows.SystemParameters.PrimaryScreenWidth - popup.Width - 10;
+
+                int pos = System.Windows.Forms.Control.MousePosition.X;
+                if(pos < popup.Left + 20)
+                {
+                    popup.Left = pos - 20;
+                }
+
+                popup.Deactivated += PopupLostFocus;
+                popup.ShowInTaskbar = false;
+                popup.Show();
+                popup.Activate();
+                popup.Focus();
+            }
+
+        }
+
+        private void PopupLostFocus(object sender, EventArgs e)
+        {
+            popup.Hide();
+        }
+
+        private void NotifyDoubleClick(object sender, EventArgs e)
+        {
 
         }
 
@@ -78,5 +132,9 @@ namespace TWX3
 
         }
 
-     }
+        private void ApplicationClosing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            notifyicon.Visible = false;
+        }
+    }
 }

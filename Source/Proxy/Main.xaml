@@ -4,8 +4,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TWX3"
-        mc:Ignorable="d"
-        Title="Main" Height="450" Width="800" Icon="/TWX3;component/Images/proxy.ico" >
+        mc:Ignorable="d" Closing="ApplicationClosing"
+        Title="Main" Height="450" Width="800" Icon="/TWX3;component/resources/notify00.ico" >
     <Grid>
         
     </Grid>

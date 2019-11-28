@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TWX3"
         mc:Ignorable="d"
-        Title="Welcome to TWX Proxy 3" Height="300" Width="500" Background="Black" Icon="/TWX3;component/Images/proxy.ico"  
+        Title="Welcome to TWX Proxy 3" Height="300" Width="500" Background="Black" Icon="/TWX3;component/resources/notify00.ico" 
         WindowStyle="None"
         BorderBrush="Black"
         BorderThickness="2"
