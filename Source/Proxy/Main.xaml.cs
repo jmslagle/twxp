@@ -60,7 +60,7 @@ namespace TWX3
             //icon.Icon = new System.Drawing.Icon(@"C:\Projects\TradeWars\TWX-Sharp\Source\Proxy\Resources\proxy.ico");
             using (Stream iconStream = Application.GetResourceStream(new Uri("pack://application:,,,/TWX3;component/Resources/notify00.ico")).Stream)
             {
-                notifyicon.Icon = new System.Drawing.Icon(iconStream);
+                notifyicon.Icon = new System.Drawing.Icon(iconStream, new System.Drawing.Size(16, 16));
             }
 
             notifyicon.MouseClick += MouseClick;

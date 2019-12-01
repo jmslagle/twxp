@@ -83,9 +83,11 @@ namespace TWX3
             LoginGrid.Visibility = Visibility.Hidden;
             BbsGrid.Visibility = Visibility.Hidden;
             QwkLyncGrid.Visibility = Visibility.Hidden;
-            SecurityGrid.Visibility = Visibility.Hidden;
             TerminalGrid.Visibility = Visibility.Hidden;
             LoggingGrid.Visibility = Visibility.Hidden;
+            RemoteGrid.Visibility = Visibility.Hidden;
+            AutoRunGrid.Visibility = Visibility.Hidden;
+            BotsGrid.Visibility = Visibility.Hidden;
 
 
             switch (((TreeViewItem)((TreeView)sender).SelectedItem).Header)
@@ -123,6 +125,19 @@ namespace TWX3
                 case "Logging":
                     LoggingGrid.Visibility = Visibility.Visible;
                     break;
+
+                case "Remote":
+                    RemoteGrid.Visibility = Visibility.Visible;
+                    break;
+
+                case "AutoRun":
+                    AutoRunGrid.Visibility = Visibility.Visible;
+                    break;
+
+                case "Bots":
+                    BotsGrid.Visibility = Visibility.Visible;
+                    break;
+
             }
         }
         private void GridMouseDown(object sender, MouseButtonEventArgs e)
