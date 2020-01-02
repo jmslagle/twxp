@@ -48,6 +48,8 @@ namespace TWX3
 
         private void Initialize()
         {
+            TWXP.Database.DataRoot data = new TWXP.Database.DataRoot();
+            data.Serialize("test.xml");
             //scripts = new Scripts();
 
             //Commands.CreateCommands();

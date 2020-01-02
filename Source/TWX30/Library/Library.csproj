@@ -52,13 +52,13 @@
     <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Database\TWX-V2.cs" />
     <Compile Include="Icons.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>Icons.resx</DependentUpon>
     </Compile>
     <Compile Include="Scripts\twscript\Commands.cs" />
-    <Compile Include="Database\Games.cs" />
     <Compile Include="Database\Ports.cs" />
     <Compile Include="Database\Sectors.cs" />
     <Compile Include="Database\Servers.cs" />
