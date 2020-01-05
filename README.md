@@ -12,15 +12,13 @@ Originally written by Remco Mulder, and Elder Prophit. We are proud to finally b
 
 ## TWX3 Projects
 
-* [WPF/TWXP](https://github.com/TW2002/twxp/tree/master/Source/WPF/TWXP) is the main executalbe.
+* [WPF/TWXP](https://github.com/TW2002/twxp/tree/master/Source/TWX30/Proxy) is the main executalbe and compiler
 
-* [WPF/TWXC](https://github.com/TW2002/twxp/tree/master/Source/WPF/TWXC) Compile your code for distriburion.
+* [CORE/LIB](https://github.com/TW2002/twxp/tree/master/Source/TEX30/Library) is the main library (DLL) for WPF and Core31.
 
-* [CORE/LIB](https://github.com/TW2002/twxp/tree/master/Source/CORE/LIB) is the main library (DLL) used .
+* [CORE/TWXP](https://github.com/TW2002/twxp/tree/master/Source/TWX30/Daemon) is a daemon for use on mac/linux.
 
-* [CORE/TWXP](https://github.com/TW2002/twxp/tree/master/Source/CORE/TWXP) is a daemon for use on mac/linux.
-
-* [SETUP](https://github.com/TW2002/TWX-Sharp/tree/master/Source/SETUP) is the installer.
+* [SETUP](https://github.com/TW2002/TWX-Sharp/tree/master/Source/TWX30/Setup) is the installer.
 
 ## Other Versions:
 * [TWXProxy 2.06](https://github.com/MicroBlaster/TWXProxy/tree/master/Source/TWXProxy-MB) is an updated version of TWXProxy released by MicroBlaster.
