@@ -2,7 +2,7 @@
 
 ## What is TWX Proxy 3?
 
-**TWX Proxy 3** or TWX3 is a [TradeWars 2002 (TW2002)](http://www.eisonline.com) helper ported from Deplhi to C# by Microblaster and Shadow.
+**TWX Proxy 3** or TWX3 is a [TradeWars 2002 (TW2002)](http://www.eisonline.com) helper ported from Boreland Turbo Pascal to C# by Microblaster and Shadow.
 
 Originally written by Remco Mulder, and Elder Prophit. We are proud to finally bring this application to a modern platform so that development can continue.
 
@@ -12,13 +12,13 @@ Originally written by Remco Mulder, and Elder Prophit. We are proud to finally b
 
 ## TWX3 Projects
 
-* [WPF/TWXP](https://github.com/TW2002/TWX-Sharp/tree/master/Source/WPF/TWXP) is the main executalbe.
+* [WPF/TWXP](https://github.com/TW2002/twxp/tree/master/Source/WPF/TWXP) is the main executalbe.
 
-* [WPF/TWXC](https://github.com/TW2002/TWX-Sharp/tree/master/Source/WPF/TWXC) Compile your code for distriburion.
+* [WPF/TWXC](https://github.com/TW2002/twxp/tree/master/Source/WPF/TWXC) Compile your code for distriburion.
 
-* [CORE/LIB](https://github.com/TW2002/TWX-Sharp/tree/master/Source/CORE/LIB) is the main library (DLL) used .
+* [CORE/LIB](https://github.com/TW2002/twxp/tree/master/Source/CORE/LIB) is the main library (DLL) used .
 
-* [CORE/TWXP](https://github.com/TW2002/TWX-Sharp/tree/master/Source/CORE/TWXP) is a daemon for use on mac/linux.
+* [CORE/TWXP](https://github.com/TW2002/twxp/tree/master/Source/CORE/TWXP) is a daemon for use on mac/linux.
 
 * [SETUP](https://github.com/TW2002/TWX-Sharp/tree/master/Source/SETUP) is the installer.
 
