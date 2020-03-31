@@ -38,7 +38,8 @@ const
   // TWX Proxy 2.03Final is version 3
   // TWX Proxy 2.04 is version 4
   // TWX Proxy 2.05 is version 5
-  COMPILED_SCRIPT_VERSION = 5;
+  // TWX Proxy 2.06 is version 6
+  COMPILED_SCRIPT_VERSION = 6;
 
   PARAM_CMD = 0;
   PARAM_VAR = 1; // User variable prefix
@@ -1384,6 +1385,41 @@ begin
       RecurseCmd(['PAUSE'], Line, ScriptID);
       RecurseCmd([':WAITON' + IntToStr(WaitOnCount)], Line, ScriptID);
     end
+    // MB - Macro added for 2.06
+    else if (ParamLine[0] = 'UPDATEQUICKSTATS') then
+    begin
+      Inc(WaitOnCount);
+
+      RecurseCmd(['GETWORD', 'CURRENTLINE', '$LastPrompt', '1'], Line, ScriptID);
+
+      if (ParamLine.Count > 1) then
+      begin
+        if (ParamLine[1] = 'SILENT') then
+        begin
+          RecurseCmd(['GETDEAFCLIENTS','$LastDeaf'], Line, ScriptID);
+          RecurseCmd(['SETDEAFCLIENTS'], Line, ScriptID);
+
+          RecurseCmd(['SETDELAYTRIGGER', 'WAITON' + IntToStr(WaitOnCount) + 'A', ':WAITON' + IntToStr(WaitOnCount), '2000'], Line, ScriptID);
+          RecurseCmd(['SETTEXTTRIGGER', 'WAITON' + IntToStr(WaitOnCount) + 'B', ':WAITON' + IntToStr(WaitOnCount), '$LastPrompt'], Line, ScriptID);
+          RecurseCmd(['SEND','"/"'], Line, ScriptID);
+          RecurseCmd(['PAUSE'], Line, ScriptID);
+          RecurseCmd([':WAITON' + IntToStr(WaitOnCount)], Line, ScriptID);
+          RecurseCmd(['KILLALLTRIGGERS'], Line, ScriptID);
+
+          RecurseCmd(['SETDEAFCLIENTS','$LastDeaf'], Line, ScriptID);
+        end
+      end
+      else
+      begin
+          RecurseCmd(['SETDELAYTRIGGER', 'WAITON' + IntToStr(WaitOnCount) + 'A', ':WAITON' + IntToStr(WaitOnCount), '2000'], Line, ScriptID);
+          RecurseCmd(['SETTEXTTRIGGER', 'WAITON' + IntToStr(WaitOnCount) + 'B', ':WAITON' + IntToStr(WaitOnCount), '$LastPrompt'], Line, ScriptID);
+          RecurseCmd(['SEND','"/"'], Line, ScriptID);
+          RecurseCmd(['PAUSE'], Line, ScriptID);
+          RecurseCmd([':WAITON' + IntToStr(WaitOnCount)], Line, ScriptID);
+          RecurseCmd(['KILLTRIGGER', 'WAITON' + IntToStr(WaitOnCount) + 'A'], Line, ScriptID);
+          RecurseCmd(['KILLTRIGGER', 'WAITON' + IntToStr(WaitOnCount) + 'B'], Line, ScriptID);
+      end;
+    end
     else
     begin
       // identify script command
@@ -1556,11 +1592,13 @@ var
   Last        : Char;
   Linked,
   InQuote     : Boolean;
-  ParamLine   : TStringList;
+  ParamLine,
+  ParamList   : TStringList;
 begin
   FLineCount := FLineCount + ScriptText.Count;
   ScriptID := IncludeScriptList.Add(UpperCase(ScriptName));
   ParamLine := TStringList.Create;
+  ParamList := TStringList.Create;
 
   Line := 1;
 
@@ -1588,6 +1626,71 @@ begin
               ParamStr := Copy(ParamStr, 1, Length(ParamStr) - 1);
               Break;
             end;
+
+            // mb - handle asignment operators
+            if not (InQuote) and (LineText[I] = '=') then
+            begin
+              if pos(last,':*/+-') > 0 then
+              begin
+                ParamLine.Clear;
+
+                if Last = ':' then
+                  ParamLine.Append('SETVAR');
+                if Last = '*' then
+                  ParamLine.Append('MULTIPLY');
+                if Last = '/' then
+                  ParamLine.Append('DIVIDE');
+                if Last = '+' then
+                  ParamLine.Append('ADD');
+                if Last = '-' then
+                  ParamLine.Append('SUBTRACT');
+
+                ParamList.Clear;
+                ExtractStrings([' '], [], PChar(LineText), ParamList);
+
+                ParamLine.Append(Uppercase(stringreplace(ParamList[0], chr(9), '',
+                          [rfReplaceAll, rfIgnoreCase])));
+                ParamStr := '';
+                Continue;
+                //break;
+              end;
+            end;
+
+            // mb - handle increment operator
+            if not (InQuote) and (LineText[I] = '+') and (Last = '+') then
+            begin
+              ParamLine.Clear;
+              ParamLine.Append('ADD');
+
+              ParamList.Clear;
+              ExtractStrings([' '], [], PChar(LineText), ParamList);
+
+              ParamLine.Append(Uppercase(stringreplace(stringreplace(
+                      ParamList[0], '++', '',[rfReplaceAll, rfIgnoreCase]),
+                      chr(9), '',[rfReplaceAll, rfIgnoreCase])));
+
+              ParamStr := '1';
+              break;
+            end;
+
+            // mb - handle decrement operator
+            if not (InQuote) and (LineText[I] = '-') and (Last = '-') then
+            begin
+              ParamLine.Clear;
+              ParamLine.Append('SUBTRACT');
+
+              ParamList.Clear;
+              ExtractStrings([' '], [], PChar(LineText), ParamList);
+
+              ParamLine.Append(Uppercase(stringreplace(stringreplace(
+                      ParamList[0], '--', '',[rfReplaceAll, rfIgnoreCase]),
+                      chr(9), '',[rfReplaceAll, rfIgnoreCase])));
+
+              ParamStr := '1';
+              break;
+            end;
+
+
 
             if not (InQuote) and (IsOperator(LineText[I])) then
             begin

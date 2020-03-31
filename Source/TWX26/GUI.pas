@@ -57,6 +57,8 @@ type
     function GetFormEnabled(FormType: TGUIFormType): Boolean;
     procedure SetFormEnabled(FormType: TGUIFormType; Enabled: Boolean);
     procedure SetDatabaseName(const Value: string);
+    function GetDatabaseName: String;
+    procedure SetTrayHint(const Value: string);
     function GetRecording: Boolean;
     procedure SetRecording(Value: Boolean);
   protected
@@ -66,6 +68,7 @@ type
 
     property GUIForms[TGUIFormType: TGUIFormType]: TForm read GUIFormFactory;
   public
+    procedure LoadTrayIcon(const Value: string);
     procedure AfterConstruction; override;
     procedure ShowForm(FormType: TGUIFormType);
     procedure AddToHistory(HistoryType: THistoryType; const Value: string);
@@ -76,9 +79,10 @@ type
     property Connected: Boolean read GetConnected write SetConnected;
     property FormEnabled[FormType: TGUIFormType]: Boolean read GetFormEnabled write SetFormEnabled;
     property ProgramDir: string read GetProgramDir write SetProgramDir;
-    property DatabaseName: string read FDatabaseName write SetDatabaseName;
     property Recording: Boolean read GetRecording write SetRecording;
   published
+    property DatabaseName: string read GetDatabaseName write SetDatabaseName;
+    property TrayHint: string write SetTrayHint;
     property FirstLoad: Boolean read FFirstLoad write FFirstLoad;
   end;
 
@@ -128,10 +132,27 @@ begin
   Result := GUIForms[FormType].Enabled;
 end;
 
-procedure TModGUI.SetDatabaseName(const Value: string);
+procedure TModGUI.SetDatabaseName(const Value : string);
 begin
-  TfrmMain(GUIForms[gfMain]).DatabaseName := Value;
+  FDatabaseName := Value;
+  //TfrmMain(GUIForms[gfMain]).DatabaseName := Value;
 end;
+
+function TModGUI.GetDatabaseName: String;
+begin
+  Result := FDatabaseName;
+end;
+
+procedure TModGUI.SetTrayHint(const Value : string);
+begin
+  TfrmMain(GUIForms[gfMain]).TrayHint := Value;
+end;
+
+procedure TModGUI.LoadTrayIcon(const Value : string);
+begin
+  TfrmMain(GUIForms[gfMain]).LoadTrayIcon(Value);
+end;
+
 
 function TModGUI.GetRecording: Boolean;
 begin
@@ -154,22 +175,6 @@ begin
   if (Value <> FConnected) then
   begin
     FConnected := Value;
-
-    with (TfrmMain(GUIForms[gfMain])) do
-    begin
-      if (FConnected) then
-      begin
-        miConnect.Default := FALSE;
-        miLoad.Default := TRUE;
-        miConnect.Caption := 'Dis&connect';
-      end
-      else
-      begin
-        miConnect.Caption := '&Connect';
-        miConnect.Default := TRUE;
-        miLoad.Default := FALSE;
-      end;
-    end;
   end;
 end;
 
@@ -197,12 +202,21 @@ begin
   if (FirstLoad) then
   begin
     // Give the user a welcome message
-    MessageDlg('Welcome to TWX Proxy!  Be warned that this' + endl + 'helper does not function as usual helpers do,' + endl + 'so it is strongly recommended that you read Readme.txt before' + endl + 'continuing.', mtInformation, [mbOk], 0);
-    MessageDlg('You will need to create a new database before connecting to a server', mtInformation, [mbOk], 0);
+    MessageDlg('Welcome to TWX Proxy 2.06!  This helper is designed to work in' + endl +
+               'conjunction with your favorite Tradewars Helper or Telnet' + endl +
+               'Terminal. It does not provide a terminal window, so you should' + endl +
+               'read the Getting Started section of the wiki before continuing' + endl +
+               '(https://github.com/MicroBlaster/TWXProxy/wiki).' + endl + endl +
+               'You will need to create a new database before connecting' + endl +
+               'to a server.', mtInformation, [mbOk], 0);
+
+    // MB - License is displayed and accested in the setup progrsm, no need to display it here.
+    //ShowForm(gfLicense);
+
     ShowForm(gfSetup);
-    ShowForm(gfLicense);
     FirstLoad := False;
   end;
+
 end;
 
 end.

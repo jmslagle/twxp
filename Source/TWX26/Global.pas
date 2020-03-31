@@ -27,26 +27,73 @@ interface
 
 uses
   GUI,
+  Classes,
   Bubble,
   Menu,
   Database,
   Log,
   Process,
   Script,
-  TCP;
+  TCP,
+  Persistence;
+
+type
+  TGlobalVarItem = class(TObject)
+  public
+    constructor Create(Name, Value : String); overload;
+    constructor Create(Name : String; Data : TStringList);  overload;
+    destructor Destroy(); override;
+
+  protected
+    FName, FValue : string;
+    FArray        : TStringList;
+    FArrayCount   : Integer;
+
+  published
+    property Name : string read FName write FName;
+    property Value : string read FValue write FValue;
+    property Data : TStringList read FArray write FArray;
+    property ArrayCount : Integer read FArrayCount write FArrayCount;
+  end;
 
 // Module variables:
 var
-  TWXMenu        : TModMenu;
-  TWXDatabase    : TModDatabase;
-  TWXLog         : TModLog;
-  TWXExtractor   : TModExtractor;
-  TWXInterpreter : TModInterpreter;
-  TWXServer      : TModServer;
-  TWXClient      : TModClient;
-  TWXBubble      : TModBubble;
-  TWXGUI         : TModGUI;
+  TWXMenu           : TModMenu;
+  TWXDatabase       : TModDatabase;
+  TWXLog            : TModLog;
+  TWXExtractor      : TModExtractor;
+  TWXInterpreter    : TModInterpreter;
+  TWXServer         : TModServer;
+  TWXClient         : TModClient;
+  TWXBubble         : TModBubble;
+  TWXGUI            : TModGUI;
+  PersistenceManager: TPersistenceManager;
 
+  TWXGlobalVars     : TList;
 implementation
+
+constructor TGlobalVarItem.Create(Name, Value : String);
+begin
+  FName  := Name;
+  FValue := Value;
+  FArrayCount := 0;
+end;
+
+constructor TGlobalVarItem.Create(Name : String; Data : TStringList);
+begin
+  FName  := Name;
+  FValue := '';
+
+  //FArray := TStringList.Create;
+  FArray := Data;
+  FArrayCount := Data.Count;
+end;
+
+destructor TGlobalVarItem.Destroy();
+begin
+  Data.Free;
+end;
+
+
 
 end.

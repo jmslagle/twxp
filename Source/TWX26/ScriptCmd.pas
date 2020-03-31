@@ -397,11 +397,18 @@ end;
 
 function CmdDisconnect(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 begin
-  // CMD: disconnect
-
+  // CMD: disconnect {disable}
+  // {disable} - Will disable reconnects if true
   if (TWXClient.Connected) then
-    TWXClient.Disconnect;
+  begin
 
+    // mb - Hard disconnect if param[1] = True - other wise
+    // soft disconnect with reconnect allowed.
+    if (Length(Params) > 0) then
+      TWXClient.Disconnect
+    else
+      TWXClient.CloseClient;
+  end;
   Result := caNone;
 end;
 
@@ -434,7 +441,7 @@ begin
     EchoText := EchoText + Params[I].Value;
 
   // #13 on its own will warp the terminal display - add a linefeed with it
-  TWXServer.Broadcast(StringReplace(EchoText, #13, #13 + #10, [rfReplaceAll]));
+  TWXServer.Broadcast(StringReplace(EchoText, #13, #13 + #10, [rfReplaceAll]),TRUE,TRUE);
 
   Result := caNone;
 end;
@@ -808,6 +815,12 @@ begin
 
   ConvertToNumber(Params[0].Value, Index);
 
+  // MB - Ignore invalid call with index of zero
+  if (index = 0) then begin
+    Result := caNone;
+    exit
+  end;
+
   CheckSector(Index);
 
   S := TWXDatabase.LoadSector(Index);
@@ -851,10 +864,15 @@ begin
     else
       SetVariable(VarName + '.FIGS.TYPE', 'OFFENSIVE', '');
 
-    if (S.Anomaly) then
-      SetVariable(VarName + '.ANOMALY', 'YES', '')
-    else
+    // MB - Added mispelled paramter for backwards compatability
+    if (S.Anomaly) then begin
+      SetVariable(VarName + '.ANOMALY', 'YES', '');
+      SetVariable(VarName + '.ANOMOLY', 'YES', '')
+    end
+    else begin
       SetVariable(VarName + '.ANOMALY', 'NO', '');
+      SetVariable(VarName + '.ANOMOLY', 'NO', '');
+    end;
 
     if (S.SPort.Name = '') then
     begin
@@ -967,15 +985,40 @@ begin
   // CMD: getSectorParameter <sectorIndex> <parameterName> var
 
   ConvertToNumber(Params[0].Value, Index);
+
+  // MB - Ignore invalid call with index of zero
+  if (index = 0) then begin
+    Result := caNone;
+    exit
+  end;
+
   CheckSector(Index);
 
   if (Length(Params[1].Value) > 10) then
-    raise EScriptError.Create(SCSectorParameterError);
+  begin
+     TWXServer.Broadcast('SCSectorParameterError:' + IntToStr(Length(Params[1].Value)) + ':' + Params[1].Value);
+     raise EScriptError.Create(SCSectorParameterError);
+  end;
+
+  try
+    Params[2].Value := TWXDatabase.GetSectorVar(Index, Params[1].Value);
+  except
+    if ((index = 2) and (Params[1].Value = 'FIG_COUNT')) then begin
+      Result := caNone;
+      exit
+    end
+    else begin
+      TWXServer.Broadcast('SCSectorParameterDatabaseError:' + Params[1].Value + ':' + Params[2].Value);
+      raise EScriptError.Create(SCSectorParameterError);
+    end;
+  end;
 
   if (Length(Params[2].Value) > 40) then
+  begin
+    TWXServer.Broadcast('SCSectorParameterValueError:' + IntToStr(Length(Params[2].Value)) + ':' + Params[2].Value);
     raise EScriptError.Create(SCSectorParameterValueError);
+  end;
 
-  Params[2].Value := TWXDatabase.GetSectorVar(Index, Params[1].Value);
   Result := caNone;
 end;
 
@@ -1131,14 +1174,21 @@ begin
   // CMD: isEqual var <value1> <value2>
   // var = 1 if <value1> = <value2> else var = 0
 
-  try
-    // The difference must be within MaxFloatVariance to be considered equal
-    Bool := Abs(Params[1].DecValue - Params[2].DecValue) <= MaxFloatVariance;
-    Params[0].SetBool(Bool);
-  except on E: EScriptError do
-    // Float comparison failed, try string comparison
+  // MB - Only do a numeric comparision if both arguments are numeric
+  if (Params[1].IsNumeric and Params[2].IsNumeric) then
+  begin
+    try
+      // The difference must be within MaxFloatVariance to be considered equal
+      Bool := Abs(Params[1].DecValue - Params[2].DecValue) <= MaxFloatVariance;
+      Params[0].SetBool(Bool);
+    except on E: EScriptError do
+      // Float comparison failed,
+      Params[0].SetBool(False);
+    end;
+  end
+  else
     Params[0].SetBool(AnsiSameStr(Params[1].Value, Params[2].Value));
-  end;
+
 
   Result := caNone;
 end;
@@ -1224,7 +1274,7 @@ var
 begin
   try
     F := Params[1].DecValue;
-    Params[0].DecValue := 1;  
+    Params[0].DecValue := 1;
   except on E: Exception do
     Params[0].DecValue := 0;
   end;
@@ -1317,8 +1367,13 @@ function CmdLoad(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 begin
   // CMD: load <scriptName>
 
-  TWXInterpreter.Load(FetchScript(Params[0].Value, FALSE), FALSE);
-  Result := caNone;
+  TWXInterpreter.Load(FetchScript(Params[0].Value, FALSE), TRUE);
+
+  // MB - if the script ending is switchbot, then kill parent.
+  if Pos('switchbot', LowerCase(Params[0].Value)) > 0 then
+    Result := caStop
+  else
+    Result := caNone;
 end;
 
 function CmdLoadVar(Script : TObject; Params : array of TCmdParam) : TCmdAction;
@@ -1342,7 +1397,7 @@ function CmdLogging(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 begin
   // CMD: logging <value>
 
-  TScript(Script).LogData := (UpperCase(Params[0].Value) = 'ON') or (Params[0].Value = '1');
+  TWXLog.LogData := (UpperCase(Params[0].Value) = 'ON') or (Params[0].Value = '1');
 
   Result := caNone;
 end;
@@ -1657,6 +1712,14 @@ var
   INI : TINIFile;
 begin
   // CMD: saveVar var
+
+  // MB - This is a patch for a Mombot 3.1044 / 3.1045 incorrectly storing
+  //      $MULTIPLE_PHOTONS as a string instead of bool.
+  if (TVarParam(Params[0]).Name = '$MULTIPLE_PHOTONS') then
+    if (Params[0].Value = 'True') then
+      Params[0].Value := '1'
+    else
+      Params[0].Value := '0';
 
   INI := TINIFile.Create(TScript(Script).ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
 
@@ -2172,6 +2235,336 @@ begin
 end;
 
 // *****************************************************************************
+//                      COMMANDS ADDED FOR 2.06
+// *****************************************************************************
+
+function CmdGetDeafClients(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I          : integer;
+begin
+  Params[0].DecValue := 0;
+
+  for I := 0 to TWXServer.ClientCount - 1 do
+  begin
+    if TWXServer.ClientTypes[I] = ctDeaf then
+       Params[0].DecValue := 1
+  end;
+
+  Result := caNone;
+end;
+
+
+function CmdSetDeafClients(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+begin
+  if (Length(Params) > 0) and (Params[0].Value = '0') then
+  begin
+    if (TWXServer.ClientCount > 0) then
+    begin
+      for I := 0 to TWXServer.ClientCount - 1 do
+      begin
+        if TWXServer.ClientTypes[I] = ctDeaf then
+          TWXServer.ClientTypes[I] := ctStandard
+      end
+    end
+  end
+  else
+  begin
+    if (TWXServer.ClientCount > 0) then
+    begin
+      for I := 0 to TWXServer.ClientCount - 1 do
+      begin
+        if TWXServer.ClientTypes[I] = ctStandard then
+          TWXServer.ClientTypes[I] := ctDeaf
+      end
+    end;
+  end;
+
+  Result := caNone;
+end;
+
+function CmdSaveGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Found : Boolean;
+  I     : Integer;
+  Data  : TStringList;
+  Param   : TVarParam;
+  Indexes : TStringArray;
+begin
+  Found := False;
+
+  if TVarParam(Params[0]).ArraySize > 0 then
+  begin
+    Data :=  TStringList.Create;
+
+    for I := 1 to TVarParam(Params[0]).ArraySize do
+    begin
+      SetLength(Indexes, 1);
+      Indexes[0] := IntToStr(I);
+
+      Data.Add(TVarParam(Params[0]).GetIndexVar(Indexes).Value)
+    end;
+  end;
+
+  // Search for an existing item and update if found
+  for I := 0 to TWXGlobalVars.Count - 1 do
+  begin
+    if TGlobalVarItem(TWXGlobalVars[I]).Name = TVarParam(Params[0]).Name then
+    begin
+      if TVarParam(Params[0]).ArraySize > 0 then
+      begin
+        TGlobalVarItem(TWXGlobalVars[I]).Value := '';
+        TGlobalVarItem(TWXGlobalVars[I]).Data := Data;
+      end
+      else
+        TGlobalVarItem(TWXGlobalVars[I]).Value := Params[0].Value;
+      Found := True;
+    end;
+  end;
+
+  // Create a new item if no items were found
+  if not Found then
+    if TVarParam(Params[0]).ArraySize > 0 then
+      TWXGlobalVars.Add(TGlobalVarItem.Create(TVarParam(Params[0]).Name, Data))
+    else
+      TWXGlobalVars.Add(TGlobalVarItem.Create(TVarParam(Params[0]).Name, Params[0].Value));
+
+  Result := caNone;
+end;
+
+function CmdLoadGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+begin
+  // Search for an existing item and return value
+  for I := 0 to TWXGlobalVars.Count - 1 do
+  begin
+    if TGlobalVarItem(TWXGlobalVars[I]).Name = TVarParam(Params[0]).Name then
+    begin
+      if TGlobalVarItem(TWXGlobalVars[I]).ArrayCount > 0 then
+        TVarParam(Params[0]).SetArrayFromStrings(TGlobalVarItem(TWXGlobalVars[I]).Data)
+      else
+        Params[0].Value := TGlobalVarItem(TWXGlobalVars[I]).Value;
+    end;
+  end;
+
+  Result := caNone;
+end;
+
+function CmdClearGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+
+  TWXGlobalVars.Clear;
+
+  Result := caNone;
+end;
+
+function CmdSwitchBot(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+   IniFile     : TIniFile;
+   BotScript,
+   NextBot,
+   Section     : String;
+   BotList,
+   ScriptList,
+   SectionList : TStringList;
+   I : Integer;
+begin
+  IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+  NextBot := '';
+
+  if (Length(Params) = 1) and (Params[0].Value <> '') and (Params[0].Value <> '0') then
+  begin
+  try
+    SectionList := TStringList.Create;
+    ScriptList := TStringList.Create;
+   try
+      IniFile.ReadSections(SectionList);
+      for Section in SectionList do
+      begin
+        if (Pos('bot:', LowerCase(Section)) = 1) and
+           (Pos(LowerCase(Params[0].Value), LowerCase(Section)) > 0)then
+        begin
+          BotScript  := IniFile.ReadString(Section, 'Script', '');
+
+          ExtractStrings([','], [], PChar(BotScript), ScriptList);
+          if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptList[0]) then
+            NextBot := BotScript;
+        end;
+      end;
+    finally
+      SectionList.Free;
+      ScriptList.Free;
+    end;
+  finally
+    IniFile.Free;
+  end;
+  end
+  else
+  begin
+  try
+    SectionList := TStringList.Create;
+    ScriptList := TStringList.Create;
+    BotList := TStringList.Create;
+    try
+      IniFile.ReadSections(SectionList);
+      for Section in SectionList do
+      begin
+        if (Pos('bot:', LowerCase(Section)) = 1) then
+        begin
+          BotScript  := IniFile.ReadString(Section, 'Script', '');
+
+          ExtractStrings([','], [], PChar(BotScript), ScriptList);
+          if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptList[0]) then
+          begin
+            BotList.add(BotScript);
+          end;
+        end;
+      end;
+
+      for I := 0 to BotList.Count - 1 do
+      begin
+        if Pos(LowerCase(BotList[I]), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
+        begin
+          if I < BotList.Count -1 then
+            NextBot := BotList[I + 1]
+          else
+            NextBot := BotList[0];
+        end;
+      end;
+    finally
+      SectionList.Free;
+      ScriptList.Free;
+      BotList.Free;
+    end;
+  finally
+    IniFile.Free;
+  end;
+
+  end;
+
+  // Load the selected bot
+  if (NextBot <> '') then
+    TWXInterpreter.SwitchBot(NextBot, FALSE);
+
+  Result := caNone;
+end;
+
+function CmdStripANSI(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  S: String;
+begin
+  // CMD: CmdStripANSI textVar ansiVar
+  // removes ANSI from a variable.
+  S := Params[1].Value;
+  TWXExtractor.StripANSI(S);
+
+  Params[0].Value := S;
+
+  Result := caNone;
+end;
+
+function CmdSetAutoTrigger(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Value : Integer;
+begin
+  // CMD: setTextLineTrigger <name> <label> [<value>]
+
+  // mb - set default lifecycle to 1 if not present
+  if (Length(Params) < 4) then
+    Value := 1
+  else
+    Value := Floor(Params[3].DecValue);
+
+  TScript(Script).SetAutoTrigger(Params[0].Value, Params[1].Value, Params[2].Value, Value);
+  Result := caNone;
+end;
+
+function CmdSetAutoLineTrigger(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Value : Integer;
+begin
+  // CMD: setTextLineTrigger <name> <label> [<value>]
+
+  // mb - set default lifecycle to 1 if not present
+  //if (Length(Params) < 4) then
+  //  Value := 1
+  //else
+  //  Value := Floor(Params[3].DecValue);
+
+  //TScript(Script).SetAutoTrigger(Params[0].Value, Params[1].Value, Params[2].Value, Value);
+  Result := caNone;
+end;
+
+function CmdReqVersion(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  CurrentVer,
+  RequiredVer : Integer;
+begin
+  CurrentVer := StrToIntDef(StringReplace(ProgramVersion, '.', '', [rfReplaceAll]),0);
+  RequiredVer := StrToIntDef(StringReplace(Params[0].Value, '.', '', [rfReplaceAll]),0);
+
+  if CurrentVer >= RequiredVer then
+    Result := caNone
+  else
+  begin
+    TWXServer.ClientMessage('This script requires TWX Proxy version ' + Params[0].Value + ' or later to run.');
+    Result := caStop;
+  end;
+end;
+
+function CmdSortArray(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+
+  Result := caNone;
+end;
+
+function CmdModulas(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  F1,
+  F2 : integer;
+begin
+  // CMD: moduals var <value>
+  // Get the remainder from variable divided by a value
+
+  F2 := floor(Params[1].DecValue);
+  if (F2 = 0) then
+    raise EScriptError.Create('Division by zero');
+  F1 := floor(Params[0].DecValue);
+  UpdateParam(Params[0], F1 mod F2, TScript(Script).DecimalPrecision);
+
+  Result := caNone;
+end;
+
+
+
+function CmdAddQuickText(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: CmdAddQuickText {search} {replace}
+  // Sets user defined QuickTexts for use with echo, and getText.
+  // {search} - Text to search for.
+  // {replace} - Text to replace found text.
+
+  TWXServer.AddQuickText(Params[0].Value, Params[1].Value);
+
+  Result := caNone;
+end;
+
+function CmdClearQuickText(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  if Length(Params) > 0 then
+    TWXServer.ClearQuickText(Params[0].Value)
+  else
+    TWXServer.ClearQuickText();
+
+  Result := caNone;
+end;
+
+
+
+
+// *****************************************************************************
 //                      SCRIPT SYSTEM CONST IMPLEMENTATION
 // *****************************************************************************
 
@@ -2325,13 +2718,20 @@ begin
   if (Length(Indexes) < 1) then
     raise EScriptError.Create('Invalid parameters for PORT.CLASS[sector]');
 
-  ConvertToNumber(Indexes[0], SectIndex);
-  CheckSector(SectIndex);
+  Try
+    ConvertToNumber(Indexes[0], SectIndex);
+    CheckSector(SectIndex);
 
-  if (TWXDatabase.Sectors[SectIndex].SPort.Name = '') then
-    Result := '-1'
-  else
-    Result := IntToStr(TWXDatabase.Sectors[SectIndex].SPort.ClassIndex);
+    if (TWXDatabase.Sectors[SectIndex].SPort.Name = '') then
+      Result := '-1'
+    else
+        Result := IntToStr(TWXDatabase.Sectors[SectIndex].SPort.ClassIndex);
+  Except
+      // MB - Ignore this error and report no port found
+      Result := '-1';
+      EScriptError.Create('Invalid Sector Index (' + Indexes[0] + ')');
+  End;
+
 end;
 
 function SCPort_BuildTime(Indexes : TStringArray) : string;
@@ -2415,14 +2815,21 @@ begin
   if (Length(Indexes) < 1) then
     raise EScriptError.Create('Invalid parameters for PORT.EXISTS[sector]');
 
-  ConvertToNumber(Indexes[0], SectIndex);
-  CheckSector(SectIndex);
+  Try
+    ConvertToNumber(Indexes[0], SectIndex);
+    CheckSector(SectIndex);
 
-  if (TWXDatabase.Sectors[SectIndex].SPort.Name = '') then begin
-    Result := '0';
-  end else begin
-    Result := '1';
-  end;
+    if (TWXDatabase.Sectors[SectIndex].SPort.Name = '') then begin
+      Result := '0';
+    end else begin
+      Result := '1';
+    end;
+  Except
+      Result := '0';
+      EScriptError.Create('Invalid Sector Index (' + Indexes[0] + ')');
+  End;
+
+
 end;
 
 function SCPort_Fuel(Indexes : TStringArray) : string;
@@ -2970,8 +3377,13 @@ begin
 end;
 
 function SCStardock(Indexes : TStringArray) : string;
+var
+  Sector : integer;
 begin
-  Result := IntToStr(TWXDatabase.DBHeader.StarDock);
+  Sector := StrToInt(TWXDatabase.DBHeader.StarDock);
+  if Sector = 65535 then
+    Sector = 0;
+  Result := Sector;
 end;
 
 function SCTime(Indexes : TStringArray) : string;
@@ -2982,6 +3394,299 @@ end;
 function SCTrue(Indexes : TStringArray) : string;
 begin
   Result := '1';
+end;
+
+function SCcurrentTurns(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentTurns);
+end;
+
+function SCCurrentCredits(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentCredits)
+end;
+
+function SCCurrentFighters(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentFighters)
+end;
+
+function SCCurrentShields(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentShields)
+end;
+
+function SCCurrentTotalHolds(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentTotalHolds)
+end;
+
+function SCCurrentOreHolds(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentOreHolds)
+end;
+
+function SCCurrentOrgHolds(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentOrgHolds)
+end;
+
+function SCCurrentEquHolds(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentEquHolds)
+end;
+
+function SCCurrentColHolds(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentColHolds)
+end;
+
+function SCCurrentEmptyHolds(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentTotalHolds -
+                     TWXExtractor.CurrentOreHolds -
+                     TWXExtractor.CurrentOrgHolds -
+                     TWXExtractor.CurrentEquHolds -
+                     TWXExtractor.CurrentColHolds)
+end;
+
+function SCCurrentPhotons(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentPhotons)
+end;
+
+function SCCurrentArmids(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentArmids)
+end;
+
+function SCCurrentLimpets(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentLimpets)
+end;
+
+function SCCurrentGenTorps(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentGenTorps)
+end;
+
+function SCCurrentTwarpType(Indexes : TStringArray) : string;
+begin
+  if TWXExtractor.CurrentTwarpType = 0 then
+    Result := 'No'
+else
+    Result := IntToStr(TWXExtractor.CurrentTwarpType)
+end;
+
+function SCCurrentCloaks(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentCloaks)
+end;
+
+function SCCurrentBeacons(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentBeacons)
+end;
+
+function SCCurrentAtomics(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentAtomics)
+end;
+
+function SCCurrentCorbomite(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentCorbomite)
+end;
+
+function SCCurrentEprobes(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentEprobes)
+end;
+
+function SCCurrentMineDisr(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentMineDisr)
+end;
+
+function SCCurrentPsychicProbe(Indexes : TStringArray) : string;
+begin
+  if TWXExtractor.CurrentPsychicProbe then
+      Result := 'Yes'
+  else
+      Result := 'No'
+end;
+
+function SCCurrentPlanetScanner(Indexes : TStringArray) : string;
+begin
+  if TWXExtractor.CurrentPlanetScanner then
+      Result := 'Yes'
+  else
+      Result := 'No'
+end;
+
+function SCCurrentScanType(Indexes : TStringArray) : string;
+begin
+  if TWXExtractor.CurrentScanType = 0 then
+      Result := 'None'
+  else if TWXExtractor.CurrentScanType = 1 then
+      Result := 'Dens'
+  else if TWXExtractor.CurrentScanType = 2 then
+      Result := 'Holo'
+end;
+
+function SCCurrentAlignment(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentAlignment)
+end;
+
+function SCCurrentExperience(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentExperience)
+end;
+
+function SCCurrentCorp(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentCorp)
+end;
+
+function SCCurrentShipNumber(Indexes : TStringArray) : string;
+begin
+  Result := IntToStr(TWXExtractor.CurrentShipNumber)
+end;
+
+function SCCurrentShipClass(Indexes : TStringArray) : string;
+begin
+  Result := TWXExtractor.CurrentShipClass
+end;
+
+function SCCurrentQuickStats(Indexes : TStringArray) : string;
+begin
+
+ Result := Format(
+   'SECT  = %-11s|HLD = %-4s|FIGS = %-6s|ARMID = %-4s|TWARP = %s'+#13+
+   'TURNS = %-11s|ORE = %-4s|SHLD = %-6s|LMPIT = %-4s|PLSCN = %s'+#13+
+   'CREDS = %-11s|ORG = %-4s|PHOT = %-6s|GTORP = %-4s|LRS   = %s'+#13+
+   'ALN   = %-11s|EQU = %-4s|CRBO = %-6s|ATMDT = %-4s|PSPRB = %s'+#13+
+   'EXP   = %-11s|COL = %-4s|MDIS = %-6s|BEACN = %-4s|EPRB  = %s'+#13+
+   'SHIP  = %-4s '+#13,
+  [SCCurrentSector(Indexes),
+  SCCurrentTotalHolds(Indexes),
+  SCCurrentFighters(Indexes),
+  SCCurrentArmids(Indexes),
+  SCCurrentTwarpType(Indexes),
+
+  SCCurrentTurns(Indexes),
+  SCCurrentOreHolds(Indexes),
+  SCCurrentShields(Indexes),
+  SCCurrentLimpets(Indexes),
+  SCCurrentPlanetScanner(Indexes),
+
+  SCCurrentCredits(Indexes),
+  SCCurrentOrgHolds(Indexes),
+  SCCurrentPhotons(Indexes),
+  SCCurrentGenTorps(Indexes),
+  SCCurrentScanType(Indexes),
+
+  SCCurrentAlignment(Indexes),
+  SCCurrentEquHolds(Indexes),
+  SCCurrentCorbomite(Indexes),
+  SCCurrentAtomics(Indexes),
+  SCCurrentPsychicProbe(Indexes),
+
+  SCCurrentExperience(Indexes),
+  SCCurrentColHolds(Indexes),
+  SCCurrentMineDisr(Indexes),
+  SCCurrentBeacons(Indexes),
+  SCCurrentEprobes(Indexes),
+
+  SCCurrentShipNumber(Indexes)]);
+end;
+
+function SCCurrentQS(Indexes : TStringArray) : string;
+begin
+
+//TURNS:CRED:FIGS:SHLD:CARBO:PHOT:ALN:EXP:CORP:SHIP:Class:HLDS:ORE:ORG:EQU:COL
+Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s',
+ [SCCurrentTurns(Indexes),
+  SCCurrentCredits(Indexes),
+  SCCurrentFighters(Indexes),
+  SCCurrentShields(Indexes),
+  SCCurrentCorbomite(Indexes),
+  SCCurrentPhotons(Indexes),
+  SCCurrentAlignment(Indexes),
+  SCCurrentExperience(Indexes),
+  SCCurrentCorp(Indexes),
+  SCCurrentShipNumber(Indexes),
+  SCCurrentShipClass(Indexes),
+  SCCurrentTotalHolds(Indexes),
+  SCCurrentOreHolds(Indexes),
+  SCCurrentOrgHolds(Indexes),
+  SCCurrentEquHolds(Indexes),
+  SCCurrentColHolds(Indexes)]);
+end;
+
+function SCCurrentQSALL(Indexes : TStringArray) : string;
+begin
+//Armd:Lmpt:GTorp:AtmDt:TWarp:Clks:Beacns:EPrb:MDis:PsPrb:PlScn:LRS
+Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s',
+ [SCCurrentTurns(Indexes),
+  SCCurrentCredits(Indexes),
+  SCCurrentFighters(Indexes),
+  SCCurrentShields(Indexes),
+  SCCurrentCorbomite(Indexes),
+  SCCurrentPhotons(Indexes),
+  SCCurrentAlignment(Indexes),
+  SCCurrentExperience(Indexes),
+  SCCurrentCorp(Indexes),
+  SCCurrentShipNumber(Indexes),
+  SCCurrentShipClass(Indexes),
+  SCCurrentTotalHolds(Indexes),
+  SCCurrentOreHolds(Indexes),
+  SCCurrentOrgHolds(Indexes),
+  SCCurrentEquHolds(Indexes),
+  SCCurrentColHolds(Indexes),
+  SCCurrentArmids(Indexes),
+  SCCurrentLimpets(Indexes),
+  SCCurrentGenTorps(Indexes),
+  SCCurrentAtomics(Indexes),
+  SCCurrentTwarpType(Indexes),
+  SCCurrentCloaks(Indexes),
+  SCCurrentBeacons(Indexes),
+  SCCurrentEprobes(Indexes),
+  SCCurrentMineDisr(Indexes),
+  SCCurrentPsychicProbe(Indexes),
+  SCCurrentPlanetScanner(Indexes),
+  SCCurrentScanType(Indexes)]);
+end;
+
+function SCActiveBot(Indexes : TStringArray) : string;
+begin
+  Result := TWXInterpreter.ActiveBot;
+end;
+
+function SCActiveBotScript(Indexes : TStringArray) : string;
+begin
+  Result := TWXInterpreter.ActiveBotScript;
+end;
+
+function SCTWXVersion(Indexes : TStringArray) : string;
+begin
+  Result := ProgramVersion + Chr(ReleaseNumber + 96);
+end;
+
+function SCTWGSTYPE(Indexes : TStringArray) : string;
+begin
+  Result := inttostr(TWXExtractor.TWGSType);
+end;
+
+function SCTWGSVer(Indexes : TStringArray) : string;
+begin
+  Result := TWXExtractor.TWGSVer;
+end;
+
+function SCTW2002Ver(Indexes : TStringArray) : string;
+begin
+  Result := TWXExtractor.TW2002Ver;
 end;
 
 // *****************************************************************************
@@ -3030,7 +3735,7 @@ begin
     AddSysConstant('PORT.PERCENTFUEL', SCPort_PercentFuel);
     AddSysConstant('PORT.PERCENTORG', SCPort_PercentOrg);
     AddSysConstant('PORT.PERCENTEQUIP', SCPort_PercentEquip);
-    AddSysConstant('SECTOR.ANOMALY', SCSector_Anomaly);
+    AddSysConstant('SECTOR.ANOMOLY', SCSector_Anomaly);
     AddSysConstant('SECTOR.BACKDOORCOUNT', SCSector_BackDoorCount);
     AddSysConstant('SECTOR.BACKDOORS', SCSector_BackDoors);
     AddSysConstant('SECTOR.DENSITY', SCSector_Density);
@@ -3068,7 +3773,48 @@ begin
     AddSysConstant('SECTOR.BEACON', SCSector_Beacon);
     AddSysConstant('SECTOR.CONSTELLATION', SCSector_Constellation);
     AddSysConstant('SECTOR.FIGS.TYPE', SCSector_Figs_Type);
+    AddSysConstant('SECTOR.ANOMALY', SCSector_Anomaly);
 
+    // Added in 2.06
+    AddSysConstant('CURRENTTURNS', SCCurrentTurns);
+    AddSysConstant('CURRENTCREDITS', SCCurrentCredits);
+    AddSysConstant('CURRENTFIGHTERS', SCCurrentFighters);
+    AddSysConstant('CURRENTSHIELDS', SCCurrentShields);
+    AddSysConstant('CURRENTTOTALHOLDS', SCCurrentTotalHolds);
+    AddSysConstant('CURRENTOREHOLDS', SCCurrentOreHolds);
+    AddSysConstant('CURRENTORGHOLDS', SCCurrentOrgHolds);
+    AddSysConstant('CURRENTEQUHOLDS', SCCurrentEquHolds);
+    AddSysConstant('CURRENTCOLHOLDS', SCCurrentColHolds);
+    AddSysConstant('CURRENTEMPTYHOLDS', SCCurrentEmptyHolds);
+    AddSysConstant('CURRENTPHOTONS', SCCurrentPhotons);
+    AddSysConstant('CURRENTARMIDS', SCCurrentArmids);
+    AddSysConstant('CURRENTLIMPETS', SCCurrentLimpets);
+    AddSysConstant('CURRENTGENTORPS', SCCurrentGenTorps);
+    AddSysConstant('CURRENTTWARPTYPE', SCCurrentTwarpType);
+    AddSysConstant('CURRENTCLOAKS', SCCurrentCloaks);
+    AddSysConstant('CURRENTBEACONS', SCCurrentBeacons);
+    AddSysConstant('CURRENTATOMICS', SCCurrentAtomics);
+    AddSysConstant('CURRENTCORBOMITE', SCCurrentCorbomite);
+    AddSysConstant('CURRENTEPROBES', SCCurrentEprobes);
+    AddSysConstant('CURRENTMINEDISR', SCCurrentMineDisr);
+    AddSysConstant('CURRENTPSYCHICPROBE', SCCurrentPsychicProbe);
+    AddSysConstant('CURRENTPLANETSCANNER', SCCurrentPlanetScanner);
+    AddSysConstant('CURRENTSCANTYPE', SCCurrentScanType);
+    AddSysConstant('CURRENTALIGNMENT', SCCurrentAlignment);
+    AddSysConstant('CURRENTEXPERIENCE', SCCurrentExperience);
+    AddSysConstant('CURRENTCORP', SCCurrentCorp);
+    AddSysConstant('CURRENTSHIPNUMBER', SCCurrentShipNumber);
+    AddSysConstant('CURRENTSHIPCLASS', SCCurrentShipClass);
+    AddSysConstant('CURRENTANSIQUICKSTATS',SCCurrentQuickStats);
+    AddSysConstant('CURRENTQUICKSTATS',SCCurrentQuickStats);
+    AddSysConstant('CURRENTQS',SCCurrentQS);
+    AddSysConstant('CURRENTQSALL',SCCurrentQSALL);
+    AddSysConstant('ACTIVEBOT',SCActiveBot);
+    AddSysConstant('ACTIVEBOTSCRIPT',SCActiveBotScript);
+    AddSysConstant('VERSION',SCTWXVersion);
+    AddSysConstant('TWGSTYPE',SCTWGSTYPE);
+    AddSysConstant('TWGSVER',SCTWGSVer);
+    AddSysConstant('TW2002VER',SCTW2002Ver);
   end;
 end;
 
@@ -3085,7 +3831,8 @@ begin
     AddCommand('CONNECT', 0, 0, CmdConnect, [], pkValue);
     AddCommand('CUTTEXT', 4, 4, CmdCutText, [pkValue, pkVar, pkValue, pkValue], pkValue);
     AddCommand('DELETE', 1, 1, CmdDelete, [pkValue], pkValue);
-    AddCommand('DISCONNECT', 0, 0, CmdDisconnect, [], pkValue);
+    AddCommand('DISCONNECT', 0, 1, CmdDisconnect, [], pkValue);
+
     AddCommand('DIVIDE', 2, 2, CmdDivide, [pkVar, pkValue], pkValue);
     AddCommand('ECHO', 1, -1, CmdEcho, [pkValue], pkValue);
     AddCommand('FILEEXISTS', 2, 2, CmdFileExists, [pkVar, pkValue], pkValue);
@@ -3096,6 +3843,7 @@ begin
     AddCommand('GETDISTANCE', 3, 3, CmdGetDistance, [pkVar, pkValue, pkValue], pkValue);
     AddCommand('GETINPUT', 2, 3, CmdGetInput, [pkVar, pkValue], pkValue);
     AddCommand('GETLENGTH', 2, 2, CmdGetLength, [pkValue, pkVar], pkValue);
+
     AddCommand('GETMENUVALUE', 2, 2, CmdGetMenuValue, [pkValue, pkValue], pkValue);
     AddCommand('GETOUTTEXT', 1, 1, CmdGetOutText, [pkVar], pkValue);
     AddCommand('GETRND', 3, 3, CmdGetRnd, [pkVar, pkValue, pkValue], pkValue);
@@ -3106,6 +3854,7 @@ begin
     AddCommand('GOSUB', 1, 1, CmdGosub, [pkValue], pkValue);
     AddCommand('GOTO', 1, 1, CmdGoto, [pkValue], pkValue);
     AddCommand('GETWORD', 3, 4, CmdGetWord, [pkValue, pkVar, pkValue], pkValue);
+
     AddCommand('GETWORDPOS', 3, 3, CmdGetWordPos, [pkValue, pkVar, pkValue], pkValue);
     AddCommand('HALT', 0, 0, CmdHalt, [], pkValue);
     AddCommand('ISEQUAL', 3, 3, CmdIsEqual, [pkVar, pkValue, pkValue], pkValue);
@@ -3116,6 +3865,7 @@ begin
     AddCommand('ISNOTEQUAL', 3, 3, CmdIsNotEqual, [pkVar, pkValue, pkValue], pkValue);
     AddCommand('ISNUMBER', 2, 2, CmdIsNumber, [pkVar, pkValue], pkValue);
     AddCommand('KILLWINDOW', 1, 1, CmdKillWindow, [pkValue], pkValue);
+
     AddCommand('KILLALLTRIGGERS', 0, 0, CmdKillAllTriggers, [], pkValue);
     AddCommand('KILLTRIGGER', 1, 1, CmdKillTrigger, [pkValue], pkValue);
     AddCommand('LOAD', 1, 1, CmdLoad, [pkValue], pkValue);
@@ -3126,6 +3876,7 @@ begin
     AddCommand('MULTIPLY', 2, 2, CmdMultiply, [pkVar, pkValue], pkValue);
     AddCommand('OPENMENU', 1, 2, CmdOpenMenu, [pkValue, pkValue], pkValue);
     AddCommand('OR', 2, 2, CmdOr, [pkVar, pkValue], pkValue);
+
     AddCommand('PAUSE', 0, 0, CmdPause, [], pkValue);
     AddCommand('PROCESSIN', 2, 2, CmdProcessIn, [pkValue, pkValue], pkValue);
     AddCommand('PROCESSOUT', 1, 1, CmdProcessOut, [pkValue], pkValue);
@@ -3136,6 +3887,7 @@ begin
     AddCommand('RETURN', 0, 0, CmdReturn, [], pkValue);
     AddCommand('ROUND', 1, 2, CmdRound, [pkVar, pkValue], pkValue);
     AddCommand('SAVEVAR', 1, 1, CmdSaveVar, [pkVar], pkValue);
+
     AddCommand('SEND', 1, -1, CmdSend, [pkValue], pkValue);
     AddCommand('SETARRAY', 2, -1, CmdSetArray, [pkVar, pkValue], pkValue);
     AddCommand('SETDELAYTRIGGER', 3, 3, CmdSetDelayTrigger, [pkValue, pkValue, pkValue], pkValue);
@@ -3146,6 +3898,7 @@ begin
     AddCommand('SETPRECISION', 1, 1, CmdSetPrecision, [pkValue], pkValue);
     AddCommand('SETPROGVAR', 2, 2, CmdSetProgVar, [pkValue, pkValue], pkValue);
     AddCommand('SETSECTORPARAMETER', 3, 3, CmdSetSectorParameter, [pkValue, pkValue, pkValue], pkValue);
+
     AddCommand('SETTEXTLINETRIGGER', 2, 3, CmdSetTextLineTrigger, [pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETTEXTOUTTRIGGER', 2, 3, CmdSetTextOutTrigger, [pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETTEXTTRIGGER', 2, 3, CmdSetTextTrigger, [pkValue, pkValue, pkValue], pkValue);
@@ -3156,6 +3909,7 @@ begin
     AddCommand('STRIPTEXT', 2, 2, CmdStripText, [pkVar, pkValue], pkValue);
     AddCommand('SUBTRACT', 2, 2, CmdSubtract, [pkVar, pkValue], pkValue);
     AddCommand('SYS_CHECK', 0, 0, CmdSys_Check, [pkValue], pkValue);
+
     AddCommand('SYS_FAIL', 0, 0, CmdSys_Fail, [pkValue], pkValue);
     AddCommand('SYS_KILL', 0, 0, CmdSys_Kill, [pkValue], pkValue);
     AddCommand('SYS_NOAUTH', 0, 0, CmdSys_NoAuth, [pkValue], pkValue);
@@ -3166,6 +3920,7 @@ begin
     AddCommand('XOR', 2, 2, CmdXor, [pkVar, pkValue], pkValue);
     AddCommand('WAITFOR', 1, 1, CmdWaitFor, [pkValue], pkValue);
     AddCommand('WINDOW', 4, 5, CmdWindow, [pkValue, pkValue, pkValue, pkValue, pkValue], pkValue);
+
     AddCommand('WRITE', 2, 2, CmdWrite, [pkValue, pkValue], pkValue);
     // Commands added for 2.04beta
     AddCommand('GETTIMER', 1, 1, CmdGetTimer, [pkVar], pkValue);
@@ -3178,8 +3933,9 @@ begin
     AddCommand('GETNEARESTWARPS', 2, 2, CmdGetNearestWarps, [pkVar, pkValue], pkValue);
     AddCommand('GETSCRIPTVERSION', 2, 2, CmdGetScriptVersion, [pkValue, pkVar], pkValue);
     AddCommand('LISTACTIVESCRIPTS', 1, 1, CmdListActiveScripts, [pkVar], pkValue);
+
     AddCommand('LISTAVOIDS', 1, 1, CmdListAvoids, [pkVar], pkValue);
-    AddCommand('LISTSECTORPARAMETERS', 2, 2, CmdListSectorParameters, [pkValue, pkValue], pkValue);
+    AddCommand('LISTSECTORPARAMETERS', 2, 2, CmdListSectorParameters, [pkValue, pkVar], pkValue);
     AddCommand('SETAVOID', 1, 1, CmdSetAvoid, [pkValue], pkValue);
     // Commands added for 2.05beta
     AddCommand('CUTLENGTHS', 3, 3, CmdCutLengths, [pkValue, pkVar, pkValue], pkValue);
@@ -3189,11 +3945,44 @@ begin
     AddCommand('MAKEDIR', 1, 1, CmdMakeDir, [pkValue], pkValue);
     AddCommand('PADLEFT', 2, 2, CmdPadLeft, [pkVar, pkValue], pkValue);
     AddCommand('PADRIGHT', 2, 2, CmdPadRight, [pkVar, pkValue], pkValue);
+
     AddCommand('REMOVEDIR', 1, 1, CmdRemoveDir, [pkValue], pkValue);
     AddCommand('SETMENUKEY', 1, 1, CmdSetMenuKey, [pkValue], pkValue);
     AddCommand('SPLITTEXT', 2, 3, CmdSplitText, [pkValue, pkVar], pkValue);
     AddCommand('TRIM', 1, 1, CmdTrim, [pkVar], pkValue);
     AddCommand('TRUNCATE', 1, 1, CmdTruncate, [pkVar], pkValue);
+
+    // Commands added for 2.06
+    AddCommand('GETDEAFCLIENTS', 1, 1, CmdGetDeafClients, [pkValue], pkValue);
+    AddCommand('SETDEAFCLIENTS', 0, 1, CmdSetDeafClients, [pkValue], pkValue);
+
+    AddCommand('SAVEGLOBAL', 1, 1, CmdSaveGlobal, [pkValue], pkValue);
+    AddCommand('LOADGLOBAL', 1, 1, CmdLoadGlobal, [pkValue], pkValue);
+    AddCommand('CLEARGLOBAL', 0, 0, CmdClearGlobal, [], pkValue);
+
+    AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
+    AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
+    AddCommand('SETAUTOTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
+    AddCommand('SETAUTOTEXTTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
+    AddCommand('REQVERSION', 1, 1, CmdReqVersion, [pkValue], pkValue);
+    AddCommand('SORTARRAY', 1, 1, CmdSortArray, [pkValue], pkValue);
+    AddCommand('MODULAS', 1, 1, CmdModulas, [pkValue], pkValue);
+
+    AddCommand('SETQUICKTEXT', 2, 2, CmdAddQuickText, [pkValue], pkValue);
+    AddCommand('CLEARQUICKTEXT', 1, 0, CmdClearQuickText, [pkValue], pkValue);
+
+//    AddCommand('COPYDATABASE', 1, 1, CmdCopyDatabase, [pkValue], pkValue);
+//    AddCommand('CREATEDATABASE', 1, 1, CmdCreateDatabase, [pkValue], pkValue);
+//    AddCommand('DELETEDATABASE', 1, 1, CmdDeleteDatabase, [pkValue], pkValue);
+//    AddCommand('EDITDATABASE', 1, 1, CmdEditDatabase, [pkValue], pkValue);
+//    AddCommand('LISTDATABASES', 1, 1, CmdListDatabases, [pkValue], pkValue);
+//    AddCommand('LOADDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+
+
+
+    //    AddCommand('', 1, 1, Cmd, [pkValue], pkValue);
+    // GETGAMESETTINGS CmdGotoPrompt ??? Switchboard ??? Maybe
+
   end;
 end;
 

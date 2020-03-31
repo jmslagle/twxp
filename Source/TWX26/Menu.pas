@@ -715,6 +715,9 @@ begin
   // script menu options
   with (SptMenu) do
   begin
+//    Menu := TTWXMenuItem.Create(Self, 'TWX_LOADBOT', miLoadBot, 'Bot Load / Switch', 'Bot Load / Switch', 'B');
+//    Menu.Help := 'This option will load / switch the active Bot. This will also terminate ALL active scripts.';
+//    AddItem(Menu);
     Menu := TTWXMenuItem.Create(Self, 'TWX_LOADSCRIPT', miLoad, 'Load script', 'Load Script', 'S');
     Menu.Help := 'The load script option will load and begin execution of a TWX Proxy script.';
     AddItem(Menu);
@@ -1031,7 +1034,7 @@ begin
   GetMenuByName('TWX_LISTENPORT').Value := IntToStr(TWXServer.ListenPort);
   GetMenuByName('TWX_BUBBLESIZE').Value := IntToStr(TWXBubble.MaxBubbleSize);
   GetMenuByName('TWX_RECONNECT').Value := BoolToStr(TWXClient.Reconnect);
-  GetMenuByName('TWX_LOG').Value := BoolToStr(TWXLog.LogData);
+  GetMenuByName('TWX_LOG').Value := BoolToStr(TWXLog.LogEnabled);
   GetMenuByName('TWX_LOGANSI').Value := BoolToStr(TWXLog.LogANSI);
   GetMenuByName('TWX_ACCEPTEXTERNAL').Value := BoolToStr(TWXServer.AcceptExternal);
   GetMenuByName('TWX_CACHE').Value := BoolToStr(TWXDatabase.UseCache);
@@ -1091,7 +1094,10 @@ end;
 procedure TModMenu.miConnect(ClientIndex : Byte);
 begin
   CloseMenu(FALSE);
-  TWXClient.Connect;
+  if TWXGUI.Connected then
+     TWXClient.Disconnect
+  else
+    TWXClient.ConnectNow;
 end;
 
 procedure TModMenu.miStopScript(ClientIndex : Byte);
@@ -1785,8 +1791,10 @@ end;
 
 procedure TModMenu.miListenPort2(ClientIndex : Byte);
 begin
-  TWXServer.ListenPort := StrToIntSafe(CurrentMenu.Line);
-  TWXServer.Activate;
+  // MB - Moved to Database
+  //TWXServer.ListenPort := StrToIntSafe(CurrentMenu.Line);
+  //TWXServer.Activate;
+  TWXDatabase.ListenPort := StrToIntSafe(CurrentMenu.Line);
   CurrentMenu.Value := IntToStr(TWXServer.ListenPort);
 end;
 
@@ -1815,9 +1823,9 @@ end;
 
 procedure TModMenu.miLog(ClientIndex : Byte);
 begin
-  TWXLog.LogData := not TWXLog.LogData;
+  TWXLog.LogEnabled := not TWXLog.LogEnabled;
 
-  if (TWXLog.LogData) then
+  if (TWXLog.LogEnabled) then
     CurrentMenu.Value := 'ON'
   else
     CurrentMenu.Value := 'OFF';
@@ -2030,7 +2038,7 @@ begin
         Head.Address := Address;
 
       if (Integer(CurrentMenu.GetParam(2)^) <> 0) then
-        Head.Port := Integer(CurrentMenu.GetParam(2)^);
+        Head.ServerPort := Integer(CurrentMenu.GetParam(2)^);
 
       Seek(F, 0);
       BlockWrite(F, Head, SizeOf(TDataHeader));
@@ -2116,7 +2124,7 @@ begin
       Head.Address := Address;
 
     if (Integer(CurrentMenu.GetParam(2)^) <> 0) then
-      Head.Port := Integer(CurrentMenu.GetParam(2)^);
+      Head.ServerPort := Integer(CurrentMenu.GetParam(2)^);
 
     if (LoginScript <> '') then
       Head.LoginScript := LoginScript;
@@ -2311,7 +2319,7 @@ begin
   TWXServer.Broadcast(endl + endl + MENU_LIGHT + 'Details for TWX Proxy database ''' + MENU_MID + Name + MENU_LIGHT + ''':' + endl + endl);
   TWXServer.Broadcast(MENU_MID + 'Size: ' + MENU_DARK + IntToStr(Head.Sectors) + endl);
   TWXServer.Broadcast(MENU_MID + 'Server: ' + MENU_DARK + Head.Address + endl);
-  TWXServer.Broadcast(MENU_MID + 'Port: ' + MENU_DARK + IntToStr(Head.Port) + endl);
+  TWXServer.Broadcast(MENU_MID + 'Port: ' + MENU_DARK + IntToStr(Head.ServerPort) + endl);
   TWXServer.Broadcast(MENU_MID + 'Use login script: ' + MENU_DARK + UseLogin + endl);
 
   if (Head.UseLogin) then

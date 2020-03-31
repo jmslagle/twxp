@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 For source notes please refer to Notes.txt
 For license terms please refer to GPL.txt.
 
-These files should be stored in the root of the compression you 
+These files should be stored in the root of the compression you
 received this source in.
 }
 unit Persistence;
@@ -27,6 +27,8 @@ interface
 
 uses
   SysUtils,
+  Windows,
+  Dialogs,
   Contnrs,
   Classes,
   Core;
@@ -93,54 +95,68 @@ var
   ClassTag     : string;
   Checksum     : Integer;
   DataSize     : Integer;
+  //ModuleNames  : array of String;
 begin
   // Stream the state of each module to file
 
   OutputValues := TMemoryStream.Create;
   ModuleValues := TMemoryStream.Create;
 
+
   try
     for I := 0 to FModuleList.Count - 1 do
     begin
       Module := (FModuleList[I] as TTWXModule);
 
-      Module.GetStateValues(ModuleValues);
+      //ModuleNames = ('mtDatabase', 'mtBubble', 'mtExtractor', 'mtMenu', 'mtServer', 'mtInterpreter', 'mtClient', 'mtLog', 'mtGUI');
+      OutputDebugString(PChar('Saving Module #' + IntToStr(i) ));
 
-      if (ModuleValues.Size > 0) then
+      // MB - Skipping mtMenu because it is throwing exceptions.
+      if (i <> 3) then
       begin
-        ModuleValues.Seek(0, soFromBeginning);
-        ClassTag := Module.Classname;
-        DataSize := Length(ClassTag);
-        OutputValues.Write(DataSize, 4);
-        OutputValues.Write(PChar(ClassTag)^, DataSize);
-        OutputValues.CopyFrom(ModuleValues, ModuleValues.Size);
-        ModuleValues.Clear;
+        Module.GetStateValues(ModuleValues);
+        OutputDebugString(PChar('Module size:' + IntToStr(ModuleValues.Size) ));
+
+        if (ModuleValues.Size > 0) then
+        begin
+          ModuleValues.Seek(0, soFromBeginning);
+          ClassTag := Module.Classname;
+          DataSize := Length(ClassTag);
+          OutputValues.Write(DataSize, 4);
+          OutputValues.Write(PChar(ClassTag)^, DataSize);
+          OutputValues.CopyFrom(ModuleValues, ModuleValues.Size);
+          ModuleValues.Clear;
+        end;
       end;
     end;
-
-    // calculate checksum
-    Checksum := CalcChecksum(OutputValues);
-
-    AssignFile(OutFile, OutputFile);
-    ReWrite(OutFile, 1);
-
-    try
-      // write size and checksum to file
-      DataSize := OutputValues.Size + 8;
-      BlockWrite(OutFile, DataSize, 4);
-      BlockWrite(OutFile, Checksum, 4);
-
-      // write stream to file
-      OutputValues.Seek(0, soFromBeginning);
-      BlockWrite(OutFile, OutputValues.Memory^, OutputValues.Size);
-    finally
-      CloseFile(OutFile);
-    end;
-
-  finally
-    OutputValues.Free;
-    ModuleValues.Free;
+  except
+    MessageDlg('Exception occured saving module states.', mtError, [mbOK], 0);
+    exit;
+//  finally
   end;
+
+  // calculate checksum
+  Checksum := CalcChecksum(OutputValues);
+
+  AssignFile(OutFile, OutputFile);
+  ReWrite(OutFile, 1);
+
+  try
+    // write size and checksum to file
+    DataSize := OutputValues.Size + 8;
+    BlockWrite(OutFile, DataSize, 4);
+    BlockWrite(OutFile, Checksum, 4);
+
+    // write stream to file
+    OutputValues.Seek(0, soFromBeginning);
+    BlockWrite(OutFile, OutputValues.Memory^, OutputValues.Size);
+  finally
+    CloseFile(OutFile);
+  end;
+
+  OutputValues.Free;
+  ModuleValues.Free;
+
 end;
 
 function TPersistenceManager.CalcChecksum(Stream: TMemoryStream): Integer;
@@ -173,7 +189,9 @@ begin
       if (StateStream.Position <> Pos) then
         StateStream.Seek(Pos, soFromBeginning); // return to where we started
 
-      TTWXModule(FModuleList[I]).SetStateValues(StateStream);
+      // MB - Don't load the TCP saved state (4)
+      // if I <> 4 then
+        TTWXModule(FModuleList[I]).SetStateValues(StateStream);
     end;
 end;
 

@@ -36,7 +36,8 @@ uses
 const
   // Version for 2.03 is 7
   // Version for 2.04 is 8
-  DATABASE_VERSION = 8;
+  // Version for 2.06 is 9
+  DATABASE_VERSION = 9;
 
   Day : array[1..7] of string = ('Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat');
 
@@ -60,11 +61,13 @@ type
     Address,
     Description : string[40];
     ServerPort,
-    Port        : Word;
+    ListenPort  : Word;
     LoginScript : string[255];
     Password,
     LoginName   : string[40];
     Game        : Char;
+    IconFile    : String[255];
+    UseRLogin   : Boolean;
     UseLogin    : Boolean;
     RobFactor,
     StealFactor : Byte;
@@ -155,7 +158,7 @@ type
     FRecording,
     FUseCache,
     FDataBaseOpen     : Boolean;
-    FListenPort       : Word;
+    FWarpCount        : Integer;
     FDataFilename     : string;
     DataFile          : File;
     DataCache,
@@ -192,6 +195,9 @@ type
     procedure SetLastPortCIM(const Value: TDateTime);
     function GetServerPort: Word;
     procedure SetServerPort(Value: Word);
+    function GetListenPort: Word;
+    procedure SetListenPort(Value: Word);
+    function GetWarpCount: Integer;
 
   protected
 
@@ -254,6 +260,8 @@ type
     property UseCache: Boolean read GetUseCache write SetUseCache;
     property Recording: Boolean read GetRecording write SetRecording;
     property ServerPort: Word read GetServerPort write SetServerPort;
+    property ListenPort: Word read GetListenPort write SetListenPort;
+    property WarpCount: Integer read GetWarpCount;
   end;
 
 function GetBlankHeader : PDataHeader;
@@ -294,8 +302,8 @@ begin
   Result^.ProgramName := 'TWX DATABASE';
   Result^.Version := DATABASE_VERSION;
   Result^.Address := '<Server>';
-  Result^.Port := 23;
-  Result^.ServerPort := 23;
+  Result^.ServerPort := 2002;
+  Result^.ListenPort := 2300;
 end;
 
 
@@ -340,7 +348,6 @@ end;
 
 procedure TModDatabase.OpenDataBase(Filename : string);
 var
-  WarpCount,
   I,
   X,
   Index     : Integer;
@@ -380,12 +387,12 @@ begin
 
   if (DBHeader.Version <> DATABASE_VERSION) then
   begin
-    TWXServer.Broadcast(endl + ANSI_12 + 'Warning: Database version ' + IntToStr(DBHeader.Version) + ', expected version ' + IntToStr(DATABASE_VERSION) + ', no data will be saved/retrieved' + ANSI_7 + endl);
+    // MB - Broadcast is not visible. Need pop-up.
+    //TWXServer.Broadcast(endl + ANSI_12 + 'Warning: Database version ' + IntToStr(DBHeader.Version) + ', expected version ' + IntToStr(DATABASE_VERSION) + ', no data will be saved/retrieved' + ANSI_7 + endl);
+    ShowMessage('Warning: Database version ' + IntToStr(DBHeader.Version) + ', expected version ' + IntToStr(DATABASE_VERSION) + ', no data will be saved/retrieved');
     CloseDatabase;
     Exit;
   end;
-
-  FListenPort := DBHeader.ServerPort; // EP - Listening Port persists here now
 
   if (UseCache) then
     OpenCache
@@ -400,7 +407,7 @@ begin
 
   // construct sector warp cache
   SectorWarpCache := AllocMem(DBHeader.Sectors * 4);
-  WarpCount := 0;
+  FWarpCount := 0;
 
   // create persistent structures used by getCourse
   SetLength(EPWarpCache, (DBHeader.Sectors + 1) * 7);
@@ -419,7 +426,7 @@ begin
     for X := 1 to 6 do
       if (S.Warp[X] > 0) then
       begin
-        Inc(WarpCount);
+        Inc(FWarpCount);
         AddWarpIn(S.Warp[X], I);
         // Sector 1's warp count occupies [7], and it's warps occupy [8] - [13]
         // Add one to the warp count
@@ -431,10 +438,19 @@ begin
   end;
 
   TWXLog.DatabaseChanged;
-
   TWXServer.Broadcast(endl + ANSI_15 + 'Database successfully loaded - ' + IntToStr(DBHeader.Sectors) + ' sectors, ' + IntToStr(WarpCount) + ' warps' + endl);
-
   TWXGUI.DatabaseName := StripFileExtension(ShortFilename(Filename));
+  TWXGUI.TrayHint := StripFileExtension(ShortFilename(Filename)) + ' (' + IntToStr(TWXDatabase.ListenPort) + ')';
+  TWXGUI.LoadTrayIcon(DBHeader.IconFile);
+
+  if TWXServer.ListenPort <> TWXDatabase.ListenPort then
+  begin
+    TWXServer.Broadcast(ANSI_15 + 'Switching listening port to ' + IntToStr(TWXDatabase.ListenPort) + ' for new database.' + endl);
+
+    TWXServer.Deactivate;
+    TWXServer.Activate;
+  end;
+
 end;
 
 procedure TModDatabase.CloseDataBase;
@@ -1138,7 +1154,7 @@ begin
     I := 0;
     while (NextRecord > 0) do begin
       Inc(I);
-      if (I > 13) then
+      if (I > 64) then
         Break;
       ReadData(SectorVar, NextRecord + 7, RecordSize);
       if (SectorVar.VarName <> '') then begin
@@ -1344,12 +1360,18 @@ begin
   NextRecord := FirstPos;
   InUse := 0;
 
-  while (NextRecord <> 0) do
-  begin
-    ReadData(@Size, NextRecord, 2);
-    CacheEmptyRecord(NextRecord, Size);
-    WriteData(@InUse, NextRecord + 2, 1);
-    ReadData(@NextRecord, NextRecord + 3, 4);
+
+  try
+    while (NextRecord <> 0) do
+    begin
+      ReadData(@Size, NextRecord, 2);
+      CacheEmptyRecord(NextRecord, Size);
+      WriteData(@InUse, NextRecord + 2, 1);
+      ReadData(@NextRecord, NextRecord + 3, 4);
+    end;
+  except
+    // MB - Getting out of memory here when displaying a sector with too many planets
+    TWXServer.ClientMessage('Unexpected error in PurgeRecordList Record # ' +  IntToStr(NextRecord));
   end;
 end;
 
@@ -1404,15 +1426,18 @@ begin
 
     DataIndex := Pointer(Integer(DataCache) + Index);
 
-    // compare memory with cached data
     if not (CompareMem(DataIndex, Data, Size)) then
-    begin
+      begin
+      {$I-}
       // data is different - update data cache and file
       CopyMemory(DataIndex, Data, Size);
       Seek(DataFile, Index);
       BlockWrite(DataFile, Data^, Size);
       DBSize := FileSize(DataFile);
+      {$I+}
     end;
+
+
   end
   else
   begin
@@ -1499,14 +1524,37 @@ end;
 
 function TModDatabase.GetServerPort: Word;
 begin
-  Result := FListenPort;
+  Result := FDBHeader.ServerPort;
 end;
 
 procedure TModDatabase.SetServerPort(Value: Word);
 begin
-  FListenPort := Value;
   FDBHeader.ServerPort := Value;
 end;
+
+function TModDatabase.GetListenPort: Word;
+begin
+  Result := FDBHeader.ListenPort;
+end;
+
+procedure TModDatabase.SetListenPort(Value: Word);
+begin
+  if FDBHeader.ListenPort <> Value then
+  begin
+    FDBHeader.ListenPort := Value;
+    TWXServer.Broadcast(ANSI_15 + 'Switching listening port to ' + IntToStr(FDBHeader.ListenPort) + '.' + endl);
+
+    TWXServer.Deactivate();
+    //TWXServer.Activate();
+  end;
+
+end;
+
+function TModDatabase.GetWarpCount: Integer;
+begin
+  Result := FWarpCount;
+end;
+
 
 function TModDatabase.GetLastPortCIM: TDateTime;
 begin

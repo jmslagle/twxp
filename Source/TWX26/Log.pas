@@ -50,6 +50,7 @@ type
     FLogFile        : file;
     FPlayLogFile    : file;
     FLastLog        : TDateTime;
+    FLogEnabled     : Boolean;
     FLogData        : Boolean;
     FLogANSI        : Boolean;
     FBinaryLogs     : Boolean;
@@ -74,6 +75,8 @@ type
     function GetProgramDir: string;
 
     { IModLog }
+    function GetLogEnabled: Boolean;
+    procedure SetLogEnabled(Value: Boolean);
     function GetLogData: Boolean;
     procedure SetLogData(Value: Boolean);
     function GetLogANSI: Boolean;
@@ -85,6 +88,7 @@ type
   public
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
+    procedure WriteLog(const Data: string);
     procedure DoLogData(const Data: string; const ANSIData: string);
     procedure DatabaseChanged;
     procedure BeginPlayLog(const Filename: string);
@@ -97,6 +101,7 @@ type
     property BinaryLogs: Boolean read GetBinaryLogs write SetBinaryLogs;
     property LogANSI: Boolean read GetLogANSI write SetLogANSI;
     property LogData: Boolean read GetLogData write SetLogData;
+    property LogEnabled: Boolean read GetLogEnabled write SetLogEnabled;
     property MaxPlayDelay: Cardinal read FMaxPlayDelay write FMaxPlayDelay;
     property NotifyPlayCuts: Boolean read FNotifyPlayCuts write FNotifyPlayCuts;
   end;
@@ -115,6 +120,8 @@ begin
   inherited;
 
   // set defaults
+  FLogEnabled := True;
+  FLogData := True;
   FNotifyPlayCuts := True;
   FMaxPlayDelay := 10000;
 end;
@@ -282,13 +289,16 @@ begin
   if (IOResult <> 0) then
     ReWrite(FLogFile, 1);
 
-  if (IOResult <> 0) then
+  // MB - Ignore reslut 2 ??? caused by mombot.
+  if (IOResult <> 0) and (IOResult <> 2) then
   begin
-    ShowMessage('Unable to open log file - logging has been disabled.' + endl + 'File: ' + LogFileName);
+    TWXServer.ClientMessage('Unable to open log file - logging has been disabled. ' + endl +
+                             'File: ' + LogFileName + '        IOResult: = ' + IntToStr(IOResult));
     LogData := FALSE;
   end
   else
   begin
+    LogData := TRUE;
     FLogFileOpen := TRUE;
     FLastLog := Now;
   end;
@@ -321,16 +331,39 @@ begin
   FreeMem(LogEntry);
 end;
 
+procedure TModLog.WriteLog(const Data: string);
+begin
+  if LogEnabled then
+  begin
+    // Make sure the log file is open.
+    if not LogFileOpen then
+      OpenLog(GetLogName)
+    else if (Trunc(Now) <> Trunc(FLastLog)) then
+    begin
+      // next day - open the next log
+      CloseLog;
+      OpenLog(GetLogName);
+    end;
+
+    {$I-}
+    Seek(FLogFile, FileSize(FLogFile));
+    BlockWrite(FLogFile, PChar(Data)^, Length(Data));
+    {$I+}
+
+  end;
+end;
+
+
 procedure TModLog.DoLogData(const Data: string; const ANSIData: string);
 var
   I: Integer;
 begin
-  if (LogData) and (LogFileOpen) then
+  if LogData and LogEnabled then
   begin
-    if not (TWXInterpreter.LogData) then
-      Exit;
-
-    if (Trunc(Now) <> Trunc(FLastLog)) then
+    // Making sure the log file is open.
+    if not LogFileOpen then
+      OpenLog(GetLogName)
+    else if (Trunc(Now) <> Trunc(FLastLog)) then
     begin
       // next day - open the next log
       CloseLog;
@@ -357,8 +390,9 @@ begin
 
     if (IOResult <> 0) then
     begin
-      ShowMessage('TWX Proxy has encountered an error logging data sent from the server.  ' + endl + 'This could be due to insufficient disk space or the log file is in use.  Logging has been disabled.');
-      LogData := FALSE;
+      // MB - This error seems to be non-fatal - We may need to re-visit this, but for now I am going to ignore it.
+      // TWXServer.ClientMessage('TWX Proxy has encountered an error logging data sent from the server.  ' + endl + 'This could be due to insufficient disk space or the log file is in use.  Logging has been disabled.');
+      // LogData := FALSE;
     end;
 
     {$I+}
@@ -369,7 +403,7 @@ procedure TModLog.DatabaseChanged;
 var
   Filename: string;
 begin
-  if (LogData) then
+  if (LogEnabled) then
   begin
     Filename := GetLogName;
 
@@ -388,9 +422,19 @@ end;
 
 procedure TModLog.SetLogData(Value: Boolean);
 begin
-  if (FLogData <> Value) then
+  FLogData := Value;
+end;
+
+function TModLog.GetLogEnabled: Boolean;
+begin
+  Result := FLogEnabled;
+end;
+
+procedure TModLog.SetLogEnabled(Value: Boolean);
+begin
+  if (FLogEnabled <> Value) then
   begin
-    FLogData := Value;
+    FLogEnabled := Value;
 
     if (Value) then
       OpenLog(GetLogName)

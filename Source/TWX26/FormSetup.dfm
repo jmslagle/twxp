@@ -39,13 +39,13 @@ object frmSetup: TfrmSetup
     object tabServer: TTabSheet
       Caption = 'Server'
       object Panel1: TPanel
-        Left = 24
-        Top = 80
+        Left = 22
+        Top = 79
         Width = 313
         Height = 233
         TabOrder = 0
         object Label12: TLabel
-          Left = 8
+          Left = 151
           Top = 73
           Width = 36
           Height = 13
@@ -53,14 +53,14 @@ object frmSetup: TfrmSetup
         end
         object Label3: TLabel
           Left = 8
-          Top = 51
-          Width = 19
+          Top = 52
+          Width = 53
           Height = 13
-          Caption = 'Port'
+          Caption = 'Server Port'
         end
         object Label1: TLabel
           Left = 8
-          Top = 30
+          Top = 31
           Width = 71
           Height = 13
           Caption = 'Server address'
@@ -95,10 +95,31 @@ object frmSetup: TfrmSetup
         end
         object Label17: TLabel
           Left = 8
-          Top = 9
+          Top = 10
           Width = 28
           Height = 13
           Caption = 'Name'
+        end
+        object Label23: TLabel
+          Left = 8
+          Top = 73
+          Width = 64
+          Height = 13
+          Caption = 'Listening Port'
+        end
+        object Label2: TLabel
+          Left = 172
+          Top = 182
+          Width = 45
+          Height = 13
+          Caption = 'Tray Icon'
+        end
+        object TrayImage: TImage
+          Left = 224
+          Top = 167
+          Width = 32
+          Height = 32
+          OnClick = TrayImageClick
         end
         object tbHost: TEdit
           Left = 96
@@ -112,19 +133,19 @@ object frmSetup: TfrmSetup
         object tbPort: TEdit
           Left = 96
           Top = 49
-          Width = 41
+          Width = 49
           Height = 21
           Enabled = False
           TabOrder = 2
-          Text = '23'
+          Text = '2002'
         end
         object tbSectors: TEdit
-          Left = 96
+          Left = 193
           Top = 70
-          Width = 161
+          Width = 49
           Height = 21
           Enabled = False
-          TabOrder = 3
+          TabOrder = 5
           Text = '5000'
         end
         object tbLoginScript: TEdit
@@ -133,7 +154,7 @@ object frmSetup: TfrmSetup
           Width = 161
           Height = 21
           Enabled = False
-          TabOrder = 5
+          TabOrder = 7
         end
         object cbUseLogin: TCheckBox
           Left = 8
@@ -142,7 +163,7 @@ object frmSetup: TfrmSetup
           Height = 17
           Caption = 'Use login script'
           Enabled = False
-          TabOrder = 4
+          TabOrder = 6
           OnClick = cbUseLoginClick
         end
         object tbLoginName: TEdit
@@ -151,7 +172,7 @@ object frmSetup: TfrmSetup
           Width = 121
           Height = 21
           Enabled = False
-          TabOrder = 6
+          TabOrder = 8
         end
         object tbPassword: TEdit
           Left = 96
@@ -159,15 +180,15 @@ object frmSetup: TfrmSetup
           Width = 121
           Height = 21
           Enabled = False
-          TabOrder = 7
+          TabOrder = 9
         end
         object tbGame: TEdit
           Left = 96
           Top = 179
-          Width = 25
+          Width = 49
           Height = 21
           Enabled = False
-          TabOrder = 8
+          TabOrder = 10
         end
         object tbDescription: TEdit
           Left = 96
@@ -178,13 +199,13 @@ object frmSetup: TfrmSetup
           TabOrder = 0
         end
         object btnSave: TButton
-          Left = 88
+          Left = 80
           Top = 206
           Width = 65
           Height = 25
           Caption = '&OK'
           Enabled = False
-          TabOrder = 9
+          TabOrder = 11
           OnClick = btnSaveClick
         end
         object btnCancel: TButton
@@ -194,8 +215,27 @@ object frmSetup: TfrmSetup
           Height = 25
           Caption = '&Cancel'
           Enabled = False
-          TabOrder = 10
+          TabOrder = 12
           OnClick = btnCancelClick
+        end
+        object tbListenPort: TEdit
+          Left = 96
+          Top = 70
+          Width = 49
+          Height = 21
+          Enabled = False
+          TabOrder = 4
+          Text = '2300'
+        end
+        object cbUseRLogin: TCheckBox
+          Left = 151
+          Top = 51
+          Width = 98
+          Height = 17
+          Caption = 'Use RLogin'
+          Enabled = False
+          TabOrder = 3
+          OnClick = cbUseLoginClick
         end
       end
       object cbGames: TComboBox
@@ -238,13 +278,10 @@ object frmSetup: TfrmSetup
     object tabProgram: TTabSheet
       Caption = 'Program'
       ImageIndex = 4
-      object Label2: TLabel
-        Left = 16
-        Top = 24
-        Width = 140
-        Height = 13
-        Caption = 'Listen for connections on port'
-      end
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Label11: TLabel
         Left = 16
         Top = 48
@@ -254,36 +291,43 @@ object frmSetup: TfrmSetup
       end
       object Label10: TLabel
         Left = 16
-        Top = 72
+        Top = 67
         Width = 100
         Height = 13
         Caption = 'Maximum bubble size'
       end
+      object Label21: TLabel
+        Left = 32
+        Top = 256
+        Width = 79
+        Height = 13
+        Caption = 'External Address'
+      end
+      object Label22: TLabel
+        Left = 212
+        Top = 115
+        Width = 43
+        Height = 13
+        Caption = 'seconds.'
+      end
       object cbAcceptExternal: TCheckBox
-        Left = 16
-        Top = 120
+        Left = 24
+        Top = 230
         Width = 169
         Height = 17
         Caption = 'Accept external connections'
-        TabOrder = 3
+        TabOrder = 2
+        OnClick = cbAcceptExternalClick
       end
       object cbBroadcast: TCheckBox
-        Left = 16
-        Top = 144
+        Left = 24
+        Top = 137
         Width = 241
         Height = 17
         Caption = 'Broadcast a message when a client connects'
         Checked = True
         State = cbChecked
-        TabOrder = 4
-      end
-      object tbListenPort: TEdit
-        Left = 168
-        Top = 22
-        Width = 57
-        Height = 21
-        TabOrder = 0
-        Text = '23'
+        TabOrder = 3
       end
       object tbMenuKey: TEdit
         Left = 168
@@ -296,48 +340,82 @@ object frmSetup: TfrmSetup
         Font.Name = 'MS Sans Serif'
         Font.Style = [fsBold]
         ParentFont = False
-        TabOrder = 1
+        TabOrder = 0
         Text = '$'
         OnChange = tbMenuKeyChange
       end
       object cbReconnect: TCheckBox
-        Left = 16
-        Top = 168
+        Left = 24
+        Top = 114
         Width = 169
         Height = 17
-        Caption = 'Automatically reconnect'
-        TabOrder = 5
+        Caption = 'Automatically reconnect after'
+        TabOrder = 4
       end
       object cbCache: TCheckBox
-        Left = 16
-        Top = 192
+        Left = 24
+        Top = 160
         Width = 209
         Height = 17
         Caption = 'Cache database in available memory'
         Checked = True
         State = cbChecked
-        TabOrder = 6
+        TabOrder = 5
       end
       object tbBubbleSize: TEdit
         Left = 168
         Top = 70
         Width = 57
         Height = 21
-        TabOrder = 2
+        TabOrder = 1
         Text = '30'
       end
       object cbLocalEcho: TCheckBox
-        Left = 16
-        Top = 216
+        Left = 24
+        Top = 184
         Width = 153
         Height = 17
         Caption = 'Local echo of outgoing text'
+        TabOrder = 6
+      end
+      object tbExternalAddress: TEdit
+        Left = 120
+        Top = 253
+        Width = 125
+        Height = 21
         TabOrder = 7
+      end
+      object cbAllowLerkers: TCheckBox
+        Left = 24
+        Top = 207
+        Width = 209
+        Height = 17
+        Caption = 'Allow Lerkers (View Only Connections)'
+        TabOrder = 8
+      end
+      object tbReconnectDelay: TEdit
+        Left = 184
+        Top = 112
+        Width = 25
+        Height = 21
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -11
+        Font.Name = 'MS Sans Serif'
+        Font.Style = [fsBold]
+        ParentFont = False
+        TabOrder = 9
+        Text = '15'
+        OnChange = tbMenuKeyChange
       end
     end
     object tabLogging: TTabSheet
       Caption = 'Logging'
       ImageIndex = 5
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Label9: TLabel
         Left = 16
         Top = 112
@@ -396,6 +474,10 @@ object frmSetup: TfrmSetup
     object tabAutoRun: TTabSheet
       Caption = 'Auto Run'
       ImageIndex = 3
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object lbAutoRun: TListBox
         Left = 24
         Top = 96
@@ -441,6 +523,10 @@ object frmSetup: TfrmSetup
       Caption = 'Registration'
       ImageIndex = 5
       TabVisible = False
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Label18: TLabel
         Left = 48
         Top = 88
@@ -535,6 +621,10 @@ object frmSetup: TfrmSetup
       Caption = 'Auth Proxy'
       ImageIndex = 4
       TabVisible = False
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Label6: TLabel
         Left = 56
         Top = 24
@@ -585,8 +675,8 @@ object frmSetup: TfrmSetup
     end
   end
   object btnOKMain: TButton
-    Left = 216
-    Top = 352
+    Left = 217
+    Top = 351
     Width = 73
     Height = 25
     Caption = '&OK'

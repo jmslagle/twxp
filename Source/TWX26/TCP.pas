@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 For source notes please refer to Notes.txt
 For license terms please refer to GPL.txt.
 
-These files should be stored in the root of the compression you 
+These files should be stored in the root of the compression you
 received this source in.
 }
 unit TCP;
@@ -27,11 +27,13 @@ interface
 
 uses
   SysUtils,
+  Windows,
   Classes,
   ScktComp,
   //OverbyteICSTnCnx,
   ExtCtrls,
   //OverbyteICSWSocket,
+  Database,
   Core;
 
 const
@@ -42,7 +44,8 @@ const
   OP_DONT = #254;
 
 type
-  TClientType = (ctStandard, ctDeaf, ctUnauthorised, ctMute);
+  TClientType = (ctStandard, ctDeaf, ctRejected, ctMute);
+  TDisplayMode = (ctSilent, ctQuiet, ctNormal, ctVerbose);
 
   TTelnetSocket = class(TTWXModule)
   type
@@ -62,6 +65,13 @@ type
     tcpClient : TClientSocket;
   end;
 
+  TQuickText = class
+  private
+    Search : string;
+    Replace : string;
+  end;
+
+
   TModServer = class(TTelnetServerSocket, IModServer)
   private
     FClientTypes     : array[0..255] of TClientType;
@@ -69,9 +79,16 @@ type
     FCurrentClient   : Integer;
     FBufferOut       : TStringList;
     FBufTimer        : TTimer;
+    FAllowLerkers    : Boolean;
     FAcceptExternal  : Boolean;
+    FExternalAddress : String;
     FBroadCastMsgs   : Boolean;
     FLocalEcho       : Boolean;
+
+    // MB - Strings to hold TW2002 color codes and user color codes
+    SystemQuickText,
+    UserQuickText     : TList ;
+
 
   private
     function GetClientType(Index : Integer) : TClientType;
@@ -83,12 +100,17 @@ type
     procedure SetListenPort(Value: Word);
 
     { IModServer }
+    function GetAllowLerkers: Boolean;
+    procedure SetAllowLerkers(Value: Boolean);
     function GetAcceptExternal: Boolean;
     procedure SetAcceptExternal(Value: Boolean);
+    function GetExternalAddress: String;
+    procedure SetExternalAddress(Value: String);
     function GetBroadCastMsgs: Boolean;
     procedure SetBroadCastMsgs(Value: Boolean);
     function GetLocalEcho: Boolean;
     procedure SetLocalEcho(Value: Boolean);
+    procedure AddSystemQuickText(Search, Replace : string);
 
   protected
     procedure tcpServerClientConnect(Sender: TObject; Socket: TCustomWinSocket);
@@ -102,12 +124,16 @@ type
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
 
-    procedure Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = TRUE; Buffered : Boolean = FALSE);
+    procedure Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE);
     procedure ClientMessage(MessageText : string);
     procedure AddBuffer(Text : string);
     procedure StopVarDump;
     procedure NotifyScriptLoad;
     procedure NotifyScriptStop;
+
+    procedure AddQuickText(Search, Replace : string);
+    procedure ClearQuickText(Search : string = '');
+    function ApplyQuickText(Text : string) : string;
 
     property ClientTypes[Index : Integer] : TClientType read GetClientType write SetClientType;
     property ClientCount : Integer read GetClientCount;
@@ -118,20 +144,29 @@ type
 
   published
     property ListenPort: Word read GetListenPort write SetListenPort;
+    property AllowLerkers: Boolean read GetAllowLerkers write SetAllowLerkers;
     property AcceptExternal: Boolean read GetAcceptExternal write SetAcceptExternal;
+    property ExternalAddress: String read GetExternalAddress write SetExternalAddress;
     property BroadCastMsgs: Boolean read GetBroadCastMsgs write SetBroadCastMsgs;
     property LocalEcho: Boolean read GetLocalEcho write SetLocalEcho;
   end;
 
   TModClient = class(TTelnetClientSocket, IModClient)
   private
+    tmrIdle,
     tmrReconnect    : TTimer;
+    FFirstConnect,
     FReconnect,
     FUserDisconnect,
     FConnecting,
-    FSendPending    : Boolean;
-    FBytesSent      : Integer;
+    FSendPending,
+    FBlockExtended  : Boolean;
+    FBytesSent,
+    FReconnectDelay,
+    FReconnectTock,
+    FreconnectCount : Integer;
     FUnsentString   : String;
+    IdleMinutes     : Integer;
 
   protected
     procedure tcpClientOnConnect(Sender: TObject; ScktComp: TCustomWinSocket);
@@ -140,25 +175,33 @@ type
     procedure tcpClientOnWrite(Sender: TObject; ScktComp: TCustomWinSocket);
     procedure tcpClientOnError(Sender: TObject; Socket: TCustomWinSocket; ErrorEvent: TErrorEvent; var ErrorCode: Integer);
     procedure tmrReconnectTimer(Sender: TObject);
+    procedure tmrIdleTimer(Sender: TObject);
 
     function GetConnected : Boolean;
 
     { IModClient }
     function GetReconnect: Boolean;
     procedure SetReconnect(Value: Boolean);
+    function GetReconnectDelay: Integer;
+    procedure SetReconnectDelay(Value: Integer);
 
   public
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
 
     procedure Send(Text : string);
-    procedure Connect(IsReconnect : Boolean = FALSE);
+    procedure Connect();
+    procedure ConnectNow();
     procedure Disconnect;
+    procedure CloseClient;
 
     property Connected : Boolean read GetConnected;
 
   published
     property Reconnect: Boolean read GetReconnect write SetReconnect;
+    property ReconnectDelay: Integer read GetReconnectDelay write SetReconnectDelay;
+    property BlockExtended: Boolean read FBlockExtended write FBlockExtended;
+    property UserDisconnect: Boolean read FUserDisconnect write FUserDisconnect;
   end;
 
 implementation
@@ -167,7 +210,9 @@ uses
   Global,
   Ansi,
   Utility,
-  Dialogs;
+  StrUtils,
+  Dialogs,
+  inifiles;
 
 
 // ***************** TModServer Implementation *********************
@@ -195,8 +240,56 @@ begin
   FBufTimer.Enabled := FALSE;
 
   // set defaults
- //tcpServer.Port := 23;
  BroadCastMsgs := True;
+
+  // mb - Cleate lists for quicktext
+  SystemQuickText := TList.Create;
+  UserQuickText := Tlist.Create;
+
+  // initialize system quicktexts
+  AddSystemQuickText('~a', '^[0;30m');
+  AddSystemQuickText('~b', '^[0;31m');
+  AddSystemQuickText('~c', '^[0;32m');
+  AddSystemQuickText('~d', '^[0;33m');
+  AddSystemQuickText('~e', '^[0;34m');
+  AddSystemQuickText('~f', '^[0;35m');
+  AddSystemQuickText('~g', '^[0;36m');
+  AddSystemQuickText('~h', '^[0;37m');
+  AddSystemQuickText('~A', '^[1;30m');
+  AddSystemQuickText('~B', '^[1;31m');
+  AddSystemQuickText('~C', '^[1;32m');
+  AddSystemQuickText('~D', '^[1;33m');
+  AddSystemQuickText('~E', '^[1;34m');
+  AddSystemQuickText('~F', '^[1;35m');
+  AddSystemQuickText('~G', '^[1;36m');
+  AddSystemQuickText('~H', '^[1;37m');
+  AddSystemQuickText('~i', '^[1;30m');
+  AddSystemQuickText('~j', '^[41m');
+  AddSystemQuickText('~k', '^[42m');
+  AddSystemQuickText('~l', '^[43m');
+  AddSystemQuickText('~m', '^[44m');
+  AddSystemQuickText('~n', '^[45m');
+  AddSystemQuickText('~o', '^[46m');
+  AddSystemQuickText('~p', '^[47m');
+  AddSystemQuickText('~!', '^[2J^[H');
+  AddSystemQuickText('~@', chr(13) + '^[0m^[0K');
+  AddSystemQuickText('~0', '^[0m');
+  AddSystemQuickText('~1', '^[0m^[1;36m');
+  AddSystemQuickText('~2', '^[0m^[1;33m');
+  AddSystemQuickText('~3', '^[0m^[35m');
+  AddSystemQuickText('~4', '^[0m^[44m');
+  AddSystemQuickText('~5', '^[0m^[32m');
+  AddSystemQuickText('~6', '^[0m^[1;5;31m');
+  AddSystemQuickText('~7', '^[0m^[1;37m');
+  AddSystemQuickText('~8', '^[0m^[1;5;31m');
+  AddSystemQuickText('~9', '^[0m^[30;47m');
+  AddSystemQuickText('~q', '^[0m^[5;34m');
+  AddSystemQuickText('~r', '^[0m^[34m');
+  AddSystemQuickText('~s', '^[0m^[30;41m');
+  AddSystemQuickText('~I', '^[0;34;47m');
+  AddSystemQuickText('~J', '^[31;47m');
+  AddSystemQuickText('~K', '^[1;33;44m');
+
 end;
 
 procedure TModServer.BeforeDestruction;
@@ -205,15 +298,102 @@ begin
   FBufferOut.Free;
   FBufTimer.Free;
 
+  while (SystemQuickText.Count > 0) do
+  begin
+    TQuickText(SystemQuickText[0]).Free;
+    SystemQuickText.Delete(0);
+  end;
+  SystemQuickText.Free;
+
+  while (UserQuickText.Count > 0) do
+  begin
+    TQuickText(UserQuickText[0]).Free;
+    UserQuickText.Delete(0);
+  end;
+  UserQuickText.Free;
+
   inherited;
 end;
 
-procedure TModServer.Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = TRUE; Buffered : Boolean = FALSE);
+function TModServer.ApplyQuickText(Text : string) : string;
+var
+  QuickText : TQuickText;
+  I : Integer;
+begin
+    for I := 0 to UserQuickText.Count - 1 do
+    begin
+      Text := stringreplace(Text, TQuickText(UserQuickText[I]).Search,
+              TQuickText(UserQuickText[I]).Replace, [rfReplaceAll]);
+    end;
+
+    for I := 0 to SystemQuickText.Count - 1 do
+    begin
+      Text := stringreplace(Text, TQuickText(SystemQuickText[I]).Search,
+              TQuickText(SystemQuickText[I]).Replace, [rfReplaceAll]);
+    end;
+
+    result := stringreplace(Text, '^[', chr(27) + '[', [rfReplaceAll]);
+end;
+
+procedure TModServer.AddSystemQuickText(Search, Replace : string);
+var
+  NewText : TQuickText;
+begin
+  // build new Syhstem QuickText
+  NewText := TQuickText.Create;
+  NewText.Search  := Search;
+  NewText.Replace := Replace;
+
+  SystemQuickText.Add(NewText);
+end;
+
+procedure TModServer.AddQuickText(Search, Replace : string);
+var
+  NewText : TQuickText;
+begin
+  // build new User QuickText
+  NewText := TQuickText.Create;
+  NewText.Search  := Search;
+  NewText.Replace := ApplyQuickText(Replace);
+
+  UserQuickText.Add(NewText);
+end;
+
+procedure TModServer.ClearQuickText(Search : string = '');
+var
+  NewText : TQuickText;
+  I : Integer;
+begin
+  if (Search = '') then
+    begin
+       while (UserQuickText.Count > 0) do
+    begin
+      TQuickText(UserQuickText[0]).Free;
+      UserQuickText.Delete(0);
+    end;
+  end
+  else
+  begin
+    for I := 0 to UserQuickText.Count - 1 do
+    begin
+      if TQuickText(UserQuickText[I]).Search = Search then
+      begin
+        TQuickText(UserQuickText[I]).Free;
+        UserQuickText.Delete(I);
+        break;
+      end;
+    end;
+  end;
+end;
+
+procedure TModServer.Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE);
 var
   I : Integer;
 begin
   if (Length(Text) = 0) then
     Exit;
+
+  Text := ApplyQuickText(Text);
 
   if not (Buffered) and (FBufferOut.Count > 0) then
   begin
@@ -225,10 +405,14 @@ begin
   for I := 0 to tcpServer.Socket.ActiveConnections - 1 do
     if (BroadcastDeaf) or (ClientTypes[I] <> ctDeaf) then
     begin
+      try
       if (AMarkEcho) and (FClientEchoMarks[I]) then
         tcpServer.Socket.Connections[I].SendText(#255 + #0 + Text + #255 + #1)
       else
         tcpServer.Socket.Connections[I].SendText(Text);
+      except
+        OutputDebugString(PChar('Unexpected error sending broadcast message'));
+      end;
     end;
 end;
 
@@ -286,8 +470,14 @@ var
 begin
   if (tcpServer.Socket.ActiveConnections > 0) then
     for I := 0 to tcpServer.Socket.ActiveConnections - 1 do
+    Begin
       if (FClientEchoMarks[I]) then
         tcpServer.Socket.Connections[I].SendText(#255 + #3);
+
+      // MB - Clear the Deaf flag if there are no other scripts running.
+      if (TWXInterpreter.Count = 0) then
+        TWXServer.ClientTypes[I] := ctStandard;
+    End;
 end;
 
 procedure TModServer.tcpServerClientConnect(Sender: TObject;
@@ -298,64 +488,131 @@ const
   T_DO = #255 + #253;
   T_DONT = #255 + #254;
 var
-  LocalClient : Boolean;
-  SktIndex    : Integer;
+  IniFile       : TIniFile;
+  LocalClient   : Boolean;
+  Index         : Integer;
+  RemoteAddress,
+  Address,
+  TempAddress   : String;
+  AddressList   : TStringList;
 begin
-  if (Socket.RemoteAddress = '127.0.0.1') or (Copy(Socket.RemoteAddress, 1, 8) = '192.168.') or (Copy(Socket.RemoteAddress, 1, 3) = '10.') then
+  IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+
+  RemoteAddress := Socket.RemoteAddress;
+  AddressList := TStringList.Create;
+  Index := GetSocketIndex(Socket);
+
+  if (RemoteAddress = '127.0.0.1') or
+  (Copy(RemoteAddress, 1, 8) = '192.168.') or
+  (Copy(RemoteAddress, 1, 3) = '10.')
+  then
     LocalClient := TRUE
   else
     LocalClient := FALSE;
 
-  if (not AcceptExternal) and (Socket.RemoteAddress <> '127.0.0.1') then
-  begin
-    // User not allowed
-    Socket.Close;
-  end
-  else
-  begin
-    // send telnet stuff - AYT
-    Socket.SendText(#255 + OP_DO + #246);
+   try
+     ExtractStrings([' '],[], pchar(ExternalAddress), AddressList);
 
-    if (BroadCastMsgs) then
+     for Address in AddressList do
+     begin
+        TempAddress := stringreplace(Address, '.*', '',[rfReplaceAll, rfIgnoreCase]);
+        if (Copy(RemoteAddress,1,length(TempAddress)) = TempAddress)
+        then
+          LocalClient := TRUE
+     end;
+   finally
+     AddressList.Free;
+   end;
+
+  if (not AcceptExternal) and (not AllowLerkers) and (RemoteAddress <> '127.0.0.1') then
     begin
-      ClientMessage(ANSI_7 + 'Active connection detected from: ' + ANSI_15 + Socket.RemoteAddress);
+      // User not allowed
+      Socket.SendText(ANSI_12 + 'External connections are disabled. Goodbye!');
+      Sleep(500);
+      FClientTypes[Index] := ctRejected;
+      Socket.Close();
+      if (BroadCastMsgs) then
+        Broadcast(endl + ANSI_12 + 'Remote connection rejected from: ' + ANSI_14 + RemoteAddress + endl);
+      exit;
+    end
+  else if ((AcceptExternal) or (AllowLerkers)) and (not LocalClient) then
+    begin
+      Socket.SendText(ANSI_12 + 'Lerkers are not welcome here. Goodbye!');
+      Sleep(500);
+      FClientTypes[Index] := ctRejected;
+      Socket.Close();
+      if (BroadCastMsgs) then
+        Broadcast(endl + ANSI_12 + 'Remote connection rejected from: ' + ANSI_14 + RemoteAddress + endl);
+      exit;
     end;
 
-    SktIndex := GetSocketIndex(Socket);
+  Socket.SendText(endl + ANSI_13 + 'TWX Proxy Server ' + ANSI_11 + 'v' +
+                  ProgramVersion + chr(ReleaseNumber + 96) + ANSI_7 + ' (' + ReleaseVersion + ')' + endl);
 
-    if (LocalClient) then
-      FClientTypes[SktIndex] := ctStandard
-    else
-      FClientTypes[SktIndex] := ctMute;
+  if (BroadCastMsgs) then
+    Broadcast(endl + ANSI_2 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl + endl)
+  else
+    Socket.SendText(endl + ANSI_2 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl);
 
-    FClientEchoMarks[SktIndex] := FALSE;
 
-    // Broadcast confirmation to client
-    Socket.SendText(endl + ANSI_7 +
-                      'TWX Proxy Server ' + ANSI_15 + 'v' + ProgramVersion + ANSI_7 + endl +
-                      '(' + ReleaseVersion + ')' + endl + endl +
-                      'There are currently ' + ANSI_15 + IntToStr(tcpServer.Socket.ActiveConnections) + ANSI_7 + ' active telnet connections' + endl);
+  begin
+    // Send Telnet "Are you there"
+    Socket.SendText(#255 + OP_DO + #246);
+    FClientEchoMarks[Index] := FALSE;
 
-    if (TWXClient.Connected) then
-      Socket.SendText('You are connected to server: ' + ANSI_15 + TWXDatabase.DBHeader.Address + endl + ANSI_7)
-    else
-      Socket.SendText('No server connections detected' + endl);
+    if (ReleaseVersion = 'Alpha') then
+      Socket.SendText(ANSI_11 + 'NOTICE: ' + ANSI_13 +
+                      'Alpha releases have not had sufficent testing, and may' + endl +
+                      'be unstable. Please do not distribute, and use at your own risk.' + endl);
+
+    if (ReleaseVersion = 'Beta') then
+      Socket.SendText(endl + ANSI_11 + 'NOTICE: ' + ANSI_13 +
+                      'Beta releases are generally considered stable, but may have' + endl +
+                      'unresolved issues. Use at your own risk.' + endl);
+
+    if (AcceptExternal) or (AllowLerkers) then
+      Socket.SendText(endl + ANSI_12 + 'WARNING: ' + ANSI_14 +
+                      'With External Connections and/or Allow Lerkers enabled,' + endl +
+                      'you are open to foreign users monitoring data remotely.' + endl);
+
+    Socket.SendText(endl);
+    try
+      if IniFile.ReadString('TWX Proxy', 'UpdateAvailable', 'False') = 'True' then
+      begin
+        Socket.SendText(ANSI_15 +
+          'An updated verion of TWX Proxy is available. To download please visit: ' + endl +
+          'https://github.com/MicroBlaster/TWXProxy/wiki' + endl + endl + ANSI_7);
+      end;
+    finally
+      IniFile.Free;
+    end;
+
+    if TWXDatabase.DataBaseOpen then
+      Socket.SendText(ANSI_10 + 'Using Database ' + ANSI_14 + TWXDatabase.DatabaseName + ANSI_10 + ' w/ ' +
+                      ANSI_14 + IntToStr(TWXDatabase.DBHeader.Sectors) + ANSI_10 + ' sectors and ' +
+                      ANSI_14 + IntToStr(TWXDatabase.WarpCount) + ANSI_10 + ' warps' + endl);
 
     if (TWXLog.LogFileOpen) then
-      Socket.SendText(endl + 'You are logging to file: ' + ANSI_15 + TWXLog.LogFilename + ANSI_7 + endl + endl);
+      Socket.SendText(ANSI_10 + 'You are logging to file: ' + ANSI_14 + TWXLog.LogFilename + endl);
 
-    if (LocalClient) then
+    Socket.SendText(endl + ANSI_13 + 'There are currently ' + ANSI_11 + IntToStr(tcpServer.Socket.ActiveConnections) +
+                           ANSI_13 + ' active telnet connections' + endl);
+
+    if (TWXClient.Connected) then
+      Socket.SendText(ANSI_13 + 'You are connected to server: ' + ANSI_11 + TWXDatabase.DBHeader.Address + endl + ANSI_7)
+    else
+      Socket.SendText(ANSI_11 + 'No' + ANSI_13 + ' server connections detected' + endl);
+
+    if ((LocalClient) and (AcceptExternal)) or (RemoteAddress = '127.0.0.1')then
     begin
-      Socket.SendText('Press ' + ANSI_15 + TWXExtractor.MenuKey + ANSI_7 + ' to activate terminal menu' + endl + endl);
-
-      if (AcceptExternal) then
-        Socket.SendText(ANSI_12 + 'WARNING: ' + ANSI_15 +
-                                  'With external connections enabled,' + endl +
-                                  'you are open to foreign users connecting' + endl +
-                                  'to your machine and monitoring data.' + endl + endl);
+      FClientTypes[Index] := ctStandard;
+      Socket.SendText(endl + ANSI_2 + 'Press ' + ANSI_14 + TWXExtractor.MenuKey + ANSI_2 + ' to activate terminal menu' + endl + endl);
     end
     else
-      Socket.SendText(ANSI_15 + 'You are locked in view only mode' + ANSI_7 + endl + endl);
+    begin
+      FClientTypes[Index] := ctMute;
+      Socket.SendText(ANSI_12 + 'You are locked in view only mode' + ANSI_7 + endl + endl);
+    end;
 
     TWXInterpreter.ProgramEvent('Client connected', '', FALSE);
   end;
@@ -369,6 +626,12 @@ var
 begin
   Index := GetSocketIndex(Socket);
 
+  // manual client message to all sockets except the one disconnecting
+  if (FClientTypes[Index] <> ctRejected) then
+    for I := 0 to tcpServer.Socket.ActiveConnections - 1 do
+      if (tcpServer.Socket.Connections[I] <> Socket) then
+        tcpServer.Socket.Connections[I].SendText( endl + ANSI_7 + 'Connection lost from: ' + ANSI_15 + Socket.RemoteAddress + ANSI_7 + endl);
+
   // remove client from list
   for I := Index to 254 do
   begin
@@ -378,10 +641,6 @@ begin
 
   TWXInterpreter.ProgramEvent('Client disconnected', '', FALSE);
 
-  // manual client message to all sockets except the one disconnecting
-  for I := 0 to tcpServer.Socket.ActiveConnections - 1 do
-    if (tcpServer.Socket.Connections[I] <> Socket) then
-      tcpServer.Socket.Connections[I].SendText(endl + ANSI_7 + 'Connection lost from: ' + ANSI_15 + Socket.RemoteAddress + ANSI_7 + endl);
 end;
 
 procedure TModServer.tcpServerClientError(Sender: TObject;
@@ -421,6 +680,13 @@ begin
   // process telnet commands
   InString := ProcessTelnet(InString, Socket);
 
+  // TODO Process ANSI response for cursor position, screen size, scroll region, etc...
+
+  // Ignore ANSI/VT100 Status report
+  if ContainsText(InString, #27 + '[0n') then
+    InString := StringReplace(InString, #27 + '[0n', '', [rfReplaceAll, rfIgnoreCase]);
+
+
   if (InString = '') then
     Exit;
 
@@ -443,7 +709,7 @@ procedure TModServer.OnBufTimer(Sender : TObject);
 begin
   if (FBufferOut.Count > 0) then
   begin
-    Broadcast(FBufferOut[0], TRUE, TRUE, TRUE);
+    Broadcast(FBufferOut[0], TRUE, FALSE, TRUE);
     FBufferOut.Delete(0);
   end
   else
@@ -492,21 +758,18 @@ end;
 
 procedure TModServer.SetListenPort(Value : Word);
 begin
-  //TWXDatabase.DBHeader.ServerPort := Value;
-  TWXDatabase.ServerPort := Value;
   if (tcpServer.Port <> Value) then
   begin
     tcpServer.Close;
-    tcpServer.Port := Value;
-  end;
-
-  // The server is no longer set active here, but requires a call to Activate
-  {try
-    tcpServer.Active := TRUE;
-  except
-    MessageDlg('Unable to bind a listening socket on port ' + IntToStr(Value) + endl + 'You will need to change it before you can connect to TWX Proxy.', mtWarning, [mbOk], 0);
-    tcpServer.Active := FALSE;
-  end;}
+    TWXDatabase.ListenPort := Value;
+    try
+      tcpServer.Port := TWXDatabase.ListenPort;
+      //tcpServer.Active := TRUE;
+    except
+      MessageDlg('Unable to bind a listening socket on port ' + IntToStr(tcpServer.Port) + '.' + endl + 'You will need to change it before you can connect to TWX Proxy.', mtWarning, [mbOk], 0);
+      tcpServer.Active := FALSE;
+    end;
+end;
 end;
 
 function TModServer.GetListenPort : Word;
@@ -519,17 +782,28 @@ begin
   if not tcpServer.Active then
   begin
     try
-      tcpServer.Active := TRUE;  
+      tcpServer.Port := TWXDatabase.ListenPort;
+      tcpServer.Active := TRUE;
     except
       MessageDlg('Unable to bind a listening socket on port ' + IntToStr(tcpServer.Port) + '.' + endl + 'You will need to change it before you can connect to TWX Proxy.', mtWarning, [mbOk], 0);
       tcpServer.Active := FALSE;
-    end;  
+    end;
   end;
 end;
 
 procedure TModServer.Deactivate;
 begin
   tcpServer.Active := FALSE;
+end;
+
+function TModServer.GetAllowLerkers: Boolean;
+begin
+  Result := FAllowLerkers;
+end;
+
+procedure TModServer.SetAllowLerkers(Value: Boolean);
+begin
+  FAllowLerkers := Value;
 end;
 
 function TModServer.GetAcceptExternal: Boolean;
@@ -540,6 +814,16 @@ end;
 procedure TModServer.SetAcceptExternal(Value: Boolean);
 begin
   FAcceptExternal := Value;
+end;
+
+function TModServer.GetExternalAddress: String;
+begin
+  Result := FExternalAddress;
+end;
+
+procedure TModServer.SetExternalAddress(Value: String);
+begin
+  FExternalAddress := Value;
 end;
 
 function TModServer.GetBroadCastMsgs: Boolean;
@@ -563,6 +847,7 @@ begin
 end;
 
 
+
 // ***************** TModClient Implementation *********************
 
 
@@ -572,42 +857,65 @@ begin
 
   FConnecting := FALSE;
   FUserDisconnect := FALSE;
-
-  tcpClient := TClientSocket.Create(Self);
-
-  with (tcpClient) do
-  begin
-    Port := 23;
-    OnConnect := tcpClientOnConnect;
-    OnDisconnect := tcpClientOnDisconnect;
-    OnRead := tcpClientOnRead;
-    OnError := tcpClientOnError;
-    OnWrite := tcpClientOnWrite;
-  end;
+  FReconnectDelay := 15;
+  FFirstConnect := TRUE;
+  FReconnectTock := -1;
+  FReconnectCount := 0;
+  FBlockExtended := FALSE;
 
   tmrReconnect := TTimer.Create(Self);
-
   with (tmrReconnect) do
   begin
     Enabled := FALSE;
-    Interval := 3000;
+    Interval := 1000;
     OnTimer := tmrReconnectTimer;
   end;
+
+  tmrIdle := TTimer.Create(Self);
+  with (tmrIdle) do
+  begin
+    Enabled := FALSE;
+    Interval := 60 * 1000;
+    OnTimer := tmrIdleTimer;
+  end;
+
 end;
 
 procedure TModClient.BeforeDestruction;
 begin
-  tcpClient.Free;
-
+  CloseClient();
   inherited;
 end;
 
 procedure TModClient.Send(Text : string);
+var
+  I: Integer;
+  S: String;
 begin
   if (Connected) and (Text <> '') then
   begin
-    FUnsentString := FUnsentString + Text;
-    FBytesSent := tcpClient.Socket.SendText(FUnsentString);
+    S := '';
+
+    // MB - Strip extended characters and # from string, until TWGS version is detected.
+    //      TWGS converts any extended character sent to the login prompt to '#', so
+    //      this should help login when stray kepalive/sentinal scripts are running.
+    if FBlockExtended then
+    begin
+      for I := 0 to Length(Text) do
+        if ((Text[I] >= #32) and (Text[I] <= #128) and (Text[I] <> '#')) or (Text[I] = #8) or (Text[I] = #13) then
+          S := S + Text[I];
+    end
+    else
+    begin
+      S := Text;
+    end;
+
+    FUnsentString := FUnsentString + S;
+    try
+      FBytesSent := tcpClient.Socket.SendText(FUnsentString);
+    except
+      OutputDebugString(PChar('Unexpected error in SendText'));
+    end;
     //if FBytesSent <> Length(Text) then
     if FBytesSent <> Length(FUnsentString) then
     begin
@@ -619,107 +927,191 @@ begin
       FSendPending := FALSE;
       FUnsentString := '';
     end;
+    if (Text <> #27) then
+      IdleMinutes := 0;
   end;
 end;
 
-procedure TModClient.Connect(IsReconnect : Boolean = FALSE);
+procedure TModClient.Connect();
 begin
-  if (Connected) or (FConnecting) or ((tmrReconnect.Enabled) and not (IsReconnect)) then
+  // MB - Allow a faster reconnect if it is the first request after a disconnect.
+  if FFirstConnect then
   begin
-    Disconnect;
-    Exit;
+    FFirstConnect := FALSE;
+    tmrReconnect.Enabled := TRUE;
+    FReconnectTock := 1;
   end;
+
+  // MB - This function only enables the reconnect timer, so that
+  //      extra connect commands from Mombot will be ignored.
+  if (not Connected) and (not FConnecting) and (FReconnectTock < 0) then
+  begin
+    tmrReconnect.Enabled := TRUE;
+    FReconnectTock := 3;
+  end;
+end;
+
+procedure TModClient.ConnectNow();
+begin
+  if (Connected or FConnecting) or (tcpClient <> nil) then
+    CloseClient();
 
   // See if we're allowed to connect
   if not (TWXDatabase.DatabaseOpen) then
   begin
-    TWXServer.ClientMessage('You must have an uncorrupted database selected to connect to a server');
+    TWXServer.ClientMessage('Please create a database before attempting to connect to a server.');
+    FUserDisconnect := TRUE;
     Exit;
   end;
 
-  tcpClient.Port := TWXDatabase.DBHeader.Port;
-  tcpClient.Host := TWXDatabase.DBHeader.Address;
+  FUserDisconnect := FALSE;
+  FConnecting := TRUE;
+  FBlockExtended := TRUE;
+
+  // MB - Moved socket creation here, to ensure there are no unflushed buffers.
+  tcpClient := TClientSocket.Create(Self);
+  with (tcpClient) do
+  begin
+    OnConnect := tcpClientOnConnect;
+    OnDisconnect := tcpClientOnDisconnect;
+    OnRead := tcpClientOnRead;
+    OnError := tcpClientOnError;
+    OnWrite := tcpClientOnWrite;
+
+    Port := TWXDatabase.DBHeader.ServerPort;
+    Host := TWXDatabase.DBHeader.Address;
+  end;
+
+  FreconnectCount := FreconnectCount + 1;
 
   // Broadcast operation
-  TWXServer.Broadcast(chr(13) + ANSI_CLEARLINE + endl + ANSI_15 + 'Attempting to connect to: ' + ANSI_7 + TWXDatabase.DBHeader.Address + ':' + IntToStr(TWXDatabase.DBHeader.Port) + ANSI_7 + endl);
+  TWXServer.Broadcast(#13 + #27 + '[A' + #27 + '[K' + ANSI_13 + 'Attempting to connect to: ' +
+                      ANSI_14 + tcpClient.Host + ANSI_13 + ':' + ANSI_14 + IntToStr(tcpClient.Port) +
+                      ANSI_13 + ' (' + ANSI_12 + IntToStr(FreconnectCount) + ANSI_13 + ')' + ANSI_15 + endl + #27 + '[K');
 
-  try
-    FConnecting := TRUE;
-    tcpClient.Open;
-
-    // Update menu options
-    TWXGUI.Connected := True;
-  except
-    if (Reconnect) then
-    begin
-      TWXServer.ClientMessage('Connection failure - retrying in 3 seconds...');
-      tmrReconnect.Enabled := TRUE;
-      FUserDisconnect := FALSE;
-      tcpClient.Close;
-    end
-    else
-      TWXServer.ClientMessage('Connection failure');
-
-    TWXInterpreter.ProgramEvent('Connection lost', '', FALSE);
-    FConnecting := FALSE;
-  end;
+  // MB - No need for an exception trap here. It will callback onError instead of throwing an exception.
+  tcpClient.Open;
 end;
 
 procedure TModClient.Disconnect;
 begin
-  // Broadcast operation
-  if (Connected) and not (FConnecting) then
-    TWXServer.ClientMessage('Disconnecting from server...')
-  else
-    TWXServer.ClientMessage('Connect cancelled.');
+  TWXExtractor.CurrentLine := '';
+  TWXServer.ClientMessage(ANSI_12 + 'Disconnecting from server...');
 
   // Make sure it doesn't try to reconnect
   FUserDisconnect := TRUE;
   tmrReconnect.Enabled := FALSE;
+  FReconnectTock := -1;
+  FreconnectCount := 0;
   FConnecting := FALSE;
 
   // Deactivate client - disconnect from server
-  tcpClient.Close;
+  CloseClient;
+end;
+
+procedure TModClient.CloseClient;
+begin
+  try
+    if tcpClient <> nil then
+    begin
+      tcpClient.Close;
+      tcpClient.Free;
+      tcpClient := nil;
+    end;
+  except
+    // MB - It is normal for this exception to be thrown if the client is already disconnected.
+    TWXServer.ClientMessage('Unexpected error while closing connection.');
+  end;
+  Sleep(500);
 end;
 
 procedure TModClient.tcpClientOnConnect(Sender: TObject; ScktComp: TCustomWinSocket);
 begin
+  // MB - Clear the buffer to prevent ##### being sent to the login prompt
+  FSendPending := FALSE;
+  FUnsentString := '';
+
   // We are now connected
+  TWXGUI.Connected := True;
 
   TWXExtractor.Reset;
-  FUserDisconnect := FALSE;
   FConnecting := FALSE;
 
-  // Send Are You There
-  ScktComp.SendText(#255 + OP_DO + #246);
+  try
+    // Send Initial Handshake
+    if TWXDatabase.DBHeader.UseRlogin then
+      ScktComp.SendText(#0 + TWXDatabase.DBHeader.LoginName + #0 + #0 + #0)
+    else
+      ScktComp.SendText(#255 + OP_DO + #246);
+  except
+    OutputDebugString(PChar('Unexpected error sending telnet handshake'));
+  end;
 
   // Broadcast event
-  TWXServer.ClientMessage('Connection accepted');
+  TWXServer.Broadcast( endl + ANSI_10 + 'Connection accepted. ' + ANSI_13 + '(' + ANSI_11 + DateTimeToStr(Now)+ ANSI_13 + ')' + endl);
 
   TWXInterpreter.ProgramEvent('Connection accepted', '', FALSE);
+  TWXLog.WriteLog(endl + endl + '--------------------------------------------------------------------------------' +
+                  endl + 'Connection accepted. (' + DateTimeToStr(Now) + ')' + endl);
+
+  // Enable the idle timer.
+  tmrIdle.Enabled := TRUE;
+  IdleMinutes := 0;
 
   // manual event - trigger login script
   if (TWXDatabase.DBHeader.UseLogin) then
-    TWXInterpreter.Load(FetchScript(TWXDatabase.DBHeader.LoginScript, FALSE), FALSE);
+  begin
+    TWXInterpreter.StopAll(FALSE);
+    TWXInterpreter.Load(FetchScript(TWXGUI.ProgramDir + '\scripts\' + TWXDatabase.DBHeader.LoginScript, FALSE), TRUE);
+  end;
 end;
 
 procedure TModClient.tcpClientOnDisconnect(Sender: TObject; ScktComp: TCustomWinSocket);
 begin
   // No longer connected
-
   TWXGUI.Connected := False;
+  FreconnectCount := 0;
 
-  // Reconnect if supposed to
-  if (Reconnect) and not (FUserDisconnect) then
+  if FConnecting then
   begin
-    TWXServer.ClientMessage('Connection lost - reconnecting in 3 seconds...');
-    tmrReconnect.Enabled := TRUE;
+    if (Reconnect) and not (FUserDisconnect) then
+    begin
+      if FReconnectDelay < 3 then
+        FReconnectDelay := 3;
+
+      TWXServer.Broadcast( ANSI_12 +'Connect Canceled. ' + ANSI_10 + 'Reconnecting in ' + ANSI_11 + IntToStr(FReconnectdelay) + ANSI_10 + ' seconds...');
+      tmrReconnect.Enabled := TRUE;
+      FReconnectTock := FReconnectDelay;
+    end
+    else
+    begin
+      TWXServer.Broadcast( ANSI_12 + 'Connect Canceled.');
+      TWXInterpreter.ProgramEvent('Connect Canceled.', '', FALSE);
+      tmrReconnect.Enabled := FALSE;
+      FReconnectTock := -1;
+    end;
+    FConnecting := FALSE;
+    FFirstConnect := FALSE;
   end
   else
-    TWXServer.ClientMessage('Connection lost.');
+  begin
+    // Reconnect if supposed to
+    if (Reconnect) and not (FUserDisconnect) then
+    begin
+      TWXServer.Broadcast( endl + endl + ANSI_12 + 'Connection lost.' + ANSI_13 + '(' + ANSI_11 + DateTimeToStr(Now)+ ANSI_13 + ')' + endl);
+      TWXServer.Broadcast( ANSI_10 + 'Reconnecting in ' + ANSI_11 + '3' + ANSI_10 + ' seconds...');
+      tmrReconnect.Enabled := TRUE;
+      FReconnectTock := 3;
+    end
+    else
+    begin
+      TWXServer.Broadcast( endl + endl + ANSI_12 + 'Connection lost. ' + ANSI_13 + '(' + ANSI_11 + DateTimeToStr(Now)+ ANSI_13 + ')' + endl + endl);
+      FFirstConnect := TRUE;
+    end;
 
-  FUserDisconnect := FALSE;
-  TWXInterpreter.ProgramEvent('Connection lost', '', FALSE);
+    TWXInterpreter.ProgramEvent('Connection Lost', '', FALSE);
+    TWXLog.WriteLog(endl + 'Connection lost. (' + DateTimeToStr(Now) + ')');
+  end;
 end;
 
 procedure TModClient.tcpClientOnRead(Sender: TObject; ScktComp: TCustomWinSocket);
@@ -762,41 +1154,86 @@ end;
 
 procedure TModClient.tcpClientOnError(Sender: TObject; Socket: TCustomWinSocket; ErrorEvent: TErrorEvent; var ErrorCode: Integer);
 begin
-  TWXGui.Connected := FALSE;
 
-  if (Reconnect) then
+  if ErrorEvent = eeConnect then
   begin
-    TWXServer.ClientMessage('Connection failure - retrying in 3 seconds...');
-    tmrReconnect.Enabled := TRUE;
-    FUserDisconnect := FALSE;
-    tcpClient.Close;
+    if (Reconnect) then
+    begin
+      if FReconnectDelay < 3 then
+        FReconnectDelay := 3;
+
+      TWXServer.Broadcast( ANSI_12 +'Failed to Connect. ' + ANSI_10 + 'Reconnecting in ' + ANSI_11 + IntToStr(FReconnectdelay) + ANSI_10 + ' seconds...');
+      tmrReconnect.Enabled := TRUE;
+      FReconnectTock := FReconnectDelay;
+    end
+    else
+    begin
+      TWXServer.Broadcast( ANSI_12 + 'Failed to Connect.');
+      TWXInterpreter.ProgramEvent('Failed to Connect.', '', FALSE);
+      tmrReconnect.Enabled := FALSE;
+      FReconnectTock := -1;
+    end;
+    FConnecting := FALSE;
+    FFirstConnect := FALSE;
+    CloseClient();
   end
   else
   begin
-    TWXServer.ClientMessage('Connection failure');
-    // EP - Only show the dialog if Reconnect = FALSE
-    MessageDlg('Error trying to connect to host ' + tcpClient.Host + ' on port ' + IntToStr(tcpClient.Port) + '.', mtWarning, [mbOk], 0);
+    OutputDebugString(PChar('Unexpected Client Socket Error received. Error Code ') + ErrorCode);
   end;
-
-  TWXInterpreter.ProgramEvent('Connection lost', '', FALSE);
-  FConnecting := FALSE;
 
   // Disable error message
   ErrorCode := 0;
 end;
 
+procedure TModClient.tmrIdleTimer(Sender: TObject);
+begin
+  IdleMinutes := IdleMinutes + 1;
+
+  if (IdleMinutes > 1) then
+  begin
+
+    // MB - Timeout a connection that is stuck in Connecting State
+    if (FConnecting = TRUE) then
+      ConnectNow();
+
+    // MB - ReEnable the log file.
+    if TWXLog.LogEnabled and (not TWXLog.LogData) then
+    begin
+      TWXLog.LogData := TRUE;
+      //TWXServer.ClientMessage(endl + 'Logging renabled. (' + DateTimeToStr(Now) + ')' + endl);
+      TWXLog.WriteLog(endl + endl + 'Logging renabled. (' + DateTimeToStr(Now) + ')' + endl + endl);
+    end;
+
+    // MB - Reverse keepalive for remote clients.
+    if TWXServer.AllowLerkers or TWXServer.AcceptExternal then
+      TWXServer.Broadcast(#27 + '[5n');  // Send ANSI/VT100 terminal status request
+  end;
+end;
+
 procedure TModClient.tmrReconnectTimer(Sender: TObject);
 begin
-  tmrReconnect.Enabled := FALSE;
-
-  if not (Connected) then
-    Connect(TRUE);
+  FReconnectTock := FReconnectTock - 1;
+  if FReconnectTock <= 0 then
+  begin
+    tmrReconnect.Enabled := FALSE;
+    FReconnectTock := -1;
+    if not FUserDisconnect then
+      ConnectNow();
+  end;
 end;
 
 function TModClient.GetConnected : Boolean;
 begin
   //Result := tcpClient.IsConnected;
-  Result := tcpClient.Active;
+  try
+    if tcpClient = nil then
+      Result := FALSE
+    else
+      Result := tcpClient.Active;
+  except
+    Result := False;
+  end;
 end;
 
 function TModClient.GetReconnect: Boolean;
@@ -807,6 +1244,19 @@ end;
 procedure TModClient.SetReconnect(Value: Boolean);
 begin
   FReconnect := Value;
+end;
+
+function TModClient.GetReconnectDelay: Integer;
+begin
+  Result := FReconnectDelay;
+end;
+
+procedure TModClient.SetReconnectDelay(Value: Integer);
+begin
+  If Value < 3 then
+    FReconnectDelay := 3
+  else
+    FReconnectDelay := Value;
 end;
 
 { TTelnetSocket }
@@ -824,8 +1274,12 @@ var
   begin
     if not (FOptionSent[OpCode]) then
     begin
-      FOptionSent[OpCode] := TRUE;
+    FOptionSent[OpCode] := TRUE;
+    try
       Socket.SendText(#255 + Char(Func) + Char(OpCode));
+    except
+      OutputDebugString(PChar('Unexpected error sending telnet response'));
+    end;
 
       if (OpCode = Byte(S[I])) then
         SentThisOp := TRUE;
