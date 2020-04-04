@@ -38,6 +38,8 @@ object frmSetup: TfrmSetup
     OnChanging = PageControlChanging
     object tabServer: TTabSheet
       Caption = 'Server'
+      ExplicitLeft = 8
+      ExplicitTop = 28
       object Panel1: TPanel
         Left = 22
         Top = 79
@@ -248,7 +250,7 @@ object frmSetup: TfrmSetup
         OnChange = cbGamesChange
       end
       object btnAdd: TButton
-        Left = 64
+        Left = 36
         Top = 48
         Width = 65
         Height = 25
@@ -257,7 +259,7 @@ object frmSetup: TfrmSetup
         OnClick = btnAddClick
       end
       object btnDelete: TButton
-        Left = 136
+        Left = 249
         Top = 48
         Width = 65
         Height = 25
@@ -266,22 +268,27 @@ object frmSetup: TfrmSetup
         OnClick = btnDeleteClick
       end
       object btnEdit: TButton
-        Left = 208
+        Left = 107
         Top = 48
         Width = 65
         Height = 25
         Caption = '&Edit'
         TabOrder = 4
-        OnClick = btnEditClick
+        OnClick = btnResetClick
+      end
+      object btnReset: TButton
+        Left = 178
+        Top = 48
+        Width = 65
+        Height = 25
+        Caption = '&Reset'
+        TabOrder = 5
+        OnClick = btnResetClick
       end
     end
     object tabProgram: TTabSheet
       Caption = 'Program'
       ImageIndex = 4
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object Label11: TLabel
         Left = 16
         Top = 48
@@ -412,10 +419,6 @@ object frmSetup: TfrmSetup
     object tabLogging: TTabSheet
       Caption = 'Logging'
       ImageIndex = 5
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object Label9: TLabel
         Left = 16
         Top = 112
@@ -474,10 +477,6 @@ object frmSetup: TfrmSetup
     object tabAutoRun: TTabSheet
       Caption = 'Auto Run'
       ImageIndex = 3
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object lbAutoRun: TListBox
         Left = 24
         Top = 96
@@ -523,10 +522,6 @@ object frmSetup: TfrmSetup
       Caption = 'Registration'
       ImageIndex = 5
       TabVisible = False
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object Label18: TLabel
         Left = 48
         Top = 88
@@ -621,10 +616,6 @@ object frmSetup: TfrmSetup
       Caption = 'Auth Proxy'
       ImageIndex = 4
       TabVisible = False
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object Label6: TLabel
         Left = 56
         Top = 24

@@ -113,6 +113,7 @@ type
     cbUseRLogin: TCheckBox;
     Label2: TLabel;
     TrayImage: TImage;
+    btnReset: TButton;
     procedure FormHide(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure btnOKMainClick(Sender: TObject);
@@ -122,7 +123,7 @@ type
     procedure btnSaveClick(Sender: TObject);
     procedure btnDeleteClick(Sender: TObject);
     procedure cbUseLoginClick(Sender: TObject);
-    procedure btnEditClick(Sender: TObject);
+    procedure btnResetClick(Sender: TObject);
     procedure btnCancelClick(Sender: TObject);
 
     procedure btnAddAutoRunClick(Sender: TObject);
@@ -730,33 +731,90 @@ begin
   Edit := FALSE;
 end;
 
-procedure TfrmSetup.btnEditClick(Sender: TObject);
+//procedure TfrmSetup.btnResetClickOld(Sender: TObject);
+//begin
+//  tbHost.Enabled := TRUE;
+//  tbPort.Enabled := TRUE;
+//  tbListenPort.Enabled := TRUE;
+//  cbUseLogin.Enabled := TRUE;
+//  cbUseRLogin.Enabled := TRUE;
+//  cbUseLoginClick(Sender);
+//  tbLoginName.Enabled := TRUE;
+//  tbPassword.Enabled := TRUE;
+//  tbGame.Enabled := TRUE;
+//  TrayImage.Enabled := TRUE;
+
+//  tbHost.SetFocus;
+
+//  btnAdd.Enabled := FALSE;
+//  btnEdit.Enabled := FALSE;
+//  btnDelete.Enabled := FALSE;
+
+//  cbGames.Enabled := FALSE;
+//  btnOKMain.Enabled := FALSE;
+//  btnCancelMain.Enabled := FALSE;
+//  btnSave.Enabled := TRUE;
+//  btnCancel.Enabled := TRUE;
+
+//  Edit := TRUE;
+//end;
+
+procedure TfrmSetup.btnResetClick(Sender: TObject);
+var
+  Result : Integer;
+  S, DB  : string;
+  Head : PDataHeader;
 begin
-  tbHost.Enabled := TRUE;
-  tbPort.Enabled := TRUE;
-  tbListenPort.Enabled := TRUE;
-  cbUseLogin.Enabled := TRUE;
-  cbUseRLogin.Enabled := TRUE;
-  cbUseLoginClick(Sender);
-  tbLoginName.Enabled := TRUE;
-  tbPassword.Enabled := TRUE;
-  tbGame.Enabled := TRUE;
-  TrayImage.Enabled := TRUE;
+  if (cbGames.ItemIndex > -1) then
+  begin
+    Result := MessageDlg('Are you sure you want to reset this database?', mtWarning, [mbYes, mbNo], 0);
 
-  tbHost.SetFocus;
+    if (Result = mrNo) then
+      Exit;
 
-  btnAdd.Enabled := FALSE;
-  btnEdit.Enabled := FALSE;
-  btnDelete.Enabled := FALSE;
+    Head := @(TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).DataHeader);
+    Head.StarDock := 65535;
 
-  cbGames.Enabled := FALSE;
-  btnOKMain.Enabled := FALSE;
-  btnCancelMain.Enabled := FALSE;
-  btnSave.Enabled := TRUE;
-  btnCancel.Enabled := TRUE;
+    S := UpperCase('data\' + cbGames.Text + '.xdb');
+    DB := UpperCase(TWXDatabase.DatabaseName);
 
-  Edit := TRUE;
+    // close the current database if it is being deleted
+    if S = DB then
+      TWXDatabase.CloseDataBase;
+
+    // delete selected database and refresh headers held in memory
+    TWXServer.ClientMessage('Reseting database: ' + ANSI_7 + S);
+    SetCurrentDir(FProgramDir);
+    DeleteFile(S);
+
+    try
+      DeleteFile('data\' + cbGames.Text + '.cfg');
+    except
+      // don't throw an error if couldn't delete .cfg file
+    end;
+
+    // create new database
+    S := 'data\' + tbDescription.Text + '.xdb';
+
+    try
+      TWXDatabase.CreateDatabase(S, Head^);
+    except
+      MessageDlg('An error occured while trying to create the database', mtError, [mbOK], 0);
+      cbGames.OnChange (Self);
+      Exit;
+    end;
+
+//    UpdateGameList('data\' + tbDescription.Text + '.xdb');
+//    TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).New := TRUE;
+
+//    FreeMem(Head);
+
+    // Reload the header into the form.
+    //cbGames.OnChange(Self);
+
+  end;
 end;
+
 
 procedure TfrmSetup.btnDeleteClick(Sender: TObject);
 var

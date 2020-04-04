@@ -347,10 +347,10 @@ begin
     IniFile := TIniFile.Create(ProgramDir + '\twxp.cfg');
 
     try
-      IniFile.WriteString('TWX Proxy', 'Upgrade', '1939.1939.1939.1939.1939');
+      IniFile.WriteString('TWX Proxy', 'Upgrade', '2814.2814.1939.1939.1939');
 
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
-      IniFile.WriteString('Bot:Mom', 'Script', 'Mombot\mombot.cts');
+      IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
       IniFile.WriteString('Bot:1045', 'Name', 'Legacy Mombot 3.1045');
       IniFile.WriteString('Bot:1045', 'Script', 'Mombot3\__mom_bot3_1045.cts');
       IniFile.WriteString('Bot:1044', 'Name', 'Legacy Mombot 3.1044');
@@ -380,7 +380,21 @@ begin
     finally
       IniFile.Free;
     end;
-  end;
+  end
+  else
+  begin
+    IniFile := TIniFile.Create(ProgramDir + '\twxp.cfg');
+
+    try
+      IniFile.WriteString('TWX Proxy', 'Upgrade', '2814.2814.1939.1939.1939');
+
+      IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
+      IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
+    finally
+      IniFile.Free;
+    end;
+  end
+
 end;
 
 var

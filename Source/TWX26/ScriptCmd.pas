@@ -3377,13 +3377,13 @@ begin
 end;
 
 function SCStardock(Indexes : TStringArray) : string;
-var
-  Sector : integer;
+
 begin
-  Sector := StrToInt(TWXDatabase.DBHeader.StarDock);
-  if Sector = 65535 then
-    Sector = 0;
-  Result := Sector;
+ // Sector := StrToInt(TWXDatabase.DBHeader.StarDock);
+  if TWXDatabase.DBHeader.StarDock = 65535 then
+    Result := '0'
+  else
+    Result := IntToStr(TWXDatabase.DBHeader.StarDock);
 end;
 
 function SCTime(Indexes : TStringArray) : string;
@@ -3961,6 +3961,7 @@ begin
     AddCommand('CLEARGLOBAL', 0, 0, CmdClearGlobal, [], pkValue);
 
     AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
+    AddCommand('GETBOTLIST', 0, 1, CmdSwitchBot, [pkValue], pkValue);
     AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
     AddCommand('SETAUTOTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETAUTOTEXTTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
@@ -3977,6 +3978,8 @@ begin
 //    AddCommand('EDITDATABASE', 1, 1, CmdEditDatabase, [pkValue], pkValue);
 //    AddCommand('LISTDATABASES', 1, 1, CmdListDatabases, [pkValue], pkValue);
 //    AddCommand('LOADDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+//    AddCommand('RESETDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+//    AddCommand('NEWINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
 
 
 

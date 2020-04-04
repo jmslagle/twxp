@@ -338,14 +338,14 @@ begin
   //TODO: Veryfy game age to determin if this is a rebang
 
   // MB - Display 'v' screen if stardock location is unknown.
-  if (TWXDatabase.DBHeader.Stardock = 65535) then
-  begin
-    Head := TWXDatabase.DBHeader;
-    Head.Stardock := 0;
-    TWXDatabase.DBHeader := Head;
-    TWXClient.Send('vi/');
-    Sleep(500);
-  end;
+//  if (TWXDatabase.DBHeader.Stardock = 65535) then
+//  begin
+//    Head := TWXDatabase.DBHeader;
+//    Head.Stardock := 0;
+//    TWXDatabase.DBHeader := Head;
+//    TWXClient.Send('vi/');
+//    Sleep(500);
+//  end;
 
     // No displays anymore, all done
     FCurrentDisplay := dNone;
@@ -1248,7 +1248,7 @@ begin
     I := StrToIntSafe(Copy(Line, 44, AnsiPos('.', Line) - 44));
     if (I > 0) and (I <= TWXDatabase.DBHeader.Sectors) then
     begin
-      if (TWXDatabase.DBHeader.StarDock = 0) then
+      if ((TWXDatabase.DBHeader.StarDock = 0) or (TWXDatabase.DBHeader.StarDock = 65535)) then
       begin
         Sect.Constellation := 'The Federation';
         Sect.Beacon := 'FedSpace, FedLaw Enforced';
