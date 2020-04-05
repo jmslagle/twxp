@@ -2360,6 +2360,7 @@ begin
   Result := caNone;
 end;
 
+
 function CmdSwitchBot(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
    IniFile     : TIniFile;
@@ -2447,6 +2448,54 @@ begin
   // Load the selected bot
   if (NextBot <> '') then
     TWXInterpreter.SwitchBot(NextBot, FALSE);
+
+  Result := caNone;
+end;
+
+function CmdGetBotList(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+   IniFile     : TIniFile;
+   Alias,
+   BotName,
+   ScriptFile,
+   Section     : String;
+   BotList,
+   SectionList : TStringList;
+   I : Integer;
+begin
+  IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+
+  try
+    SectionList := TStringList.Create;
+    BotList := TStringList.Create;
+    IniFile.ReadSections(SectionList);
+    for Section in SectionList do
+    begin
+      if (Pos('bot:', LowerCase(Section)) = 1) then
+      begin
+        Alias  := StringReplace(Section, 'bot:', '', [rfReplaceAll, rfIgnoreCase]);
+        BotName  := IniFile.ReadString(Section, 'Name', '');
+        ScriptFile  := IniFile.ReadString(Section, 'Name', '');
+
+        if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
+        begin
+          if Pos(LowerCase(BotList[I]), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
+            BotList.add(Alias + '* ' + BotName)
+          else
+            BotList.add(Alias + '  ' + BotName);
+          end;
+        end;
+      end;
+  finally
+
+  end;
+
+  TVarParam(Params[0]).SetArrayFromStrings(BotList);
+  Params[0].Value := IntToStr(BotList.Count);
+
+  SectionList.Free;
+  BotList.Free;
+  IniFile.Free;
 
   Result := caNone;
 end;
@@ -3961,7 +4010,7 @@ begin
     AddCommand('CLEARGLOBAL', 0, 0, CmdClearGlobal, [], pkValue);
 
     AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
-    AddCommand('GETBOTLIST', 0, 1, CmdSwitchBot, [pkValue], pkValue);
+    AddCommand('GETBOTLIST', 1, 1, CmdGetBotList, [pkVar], pkValue);
     AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
     AddCommand('SETAUTOTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETAUTOTEXTTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);

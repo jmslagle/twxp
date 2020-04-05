@@ -281,7 +281,7 @@ object frmSetup: TfrmSetup
         Height = 25
         Caption = '&Reset'
         TabOrder = 5
-        OnClick = btnEditClick
+        OnClick = btnResetClick
       end
     end
     object tabProgram: TTabSheet
