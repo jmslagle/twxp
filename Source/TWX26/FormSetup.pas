@@ -123,8 +123,10 @@ type
     procedure btnSaveClick(Sender: TObject);
     procedure btnDeleteClick(Sender: TObject);
     procedure cbUseLoginClick(Sender: TObject);
+    procedure btnEditClick(Sender: TObject);
     procedure btnResetClick(Sender: TObject);
     procedure btnCancelClick(Sender: TObject);
+    procedure ClearScriptData(Name: String);
 
     procedure btnAddAutoRunClick(Sender: TObject);
     procedure btnRemoveAutoRunClick(Sender: TObject);
@@ -399,13 +401,12 @@ begin
     DB := TWXDatabase.DatabaseName;
     TWXDatabase.CloseDatabase;
     PersistenceManager.SaveStateValues;
-
-    if (cbGames.ItemIndex >= 0) then
-      TWXDatabase.DatabaseName := TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).Filename;
-
   except
     TWXServer.ClientMessage('Errror - Unable to save program state.');
   end;
+
+  if (cbGames.ItemIndex >= 0) then
+  TWXDatabase.DatabaseName := TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).Filename;
 
   Close;
 end;
@@ -577,6 +578,7 @@ begin
   btnAdd.Enabled := TRUE;
   btnDelete.Enabled := TRUE;
   btnEdit.Enabled := TRUE;
+  btnReset.Enabled := TRUE;
 
   cbGames.Enabled := TRUE;
   btnOKMain.Enabled := TRUE;
@@ -622,6 +624,8 @@ begin
 
     if (DoCreate) then
     begin
+      CreateDir('data\' + tbDescription.Text);
+
       try
         TWXDatabase.CreateDatabase(S, Head^);
       except
@@ -719,6 +723,7 @@ begin
 
   btnAdd.Enabled := FALSE;
   btnEdit.Enabled := FALSE;
+  btnReset.Enabled := FALSE;
   btnDelete.Enabled := FALSE;
 
   cbGames.Enabled  := FALSE;
@@ -731,33 +736,34 @@ begin
   Edit := FALSE;
 end;
 
-//procedure TfrmSetup.btnResetClickOld(Sender: TObject);
-//begin
-//  tbHost.Enabled := TRUE;
-//  tbPort.Enabled := TRUE;
-//  tbListenPort.Enabled := TRUE;
-//  cbUseLogin.Enabled := TRUE;
-//  cbUseRLogin.Enabled := TRUE;
-//  cbUseLoginClick(Sender);
-//  tbLoginName.Enabled := TRUE;
-//  tbPassword.Enabled := TRUE;
-//  tbGame.Enabled := TRUE;
-//  TrayImage.Enabled := TRUE;
+procedure TfrmSetup.btnEditClick(Sender: TObject);
+begin
+  tbHost.Enabled := TRUE;
+  tbPort.Enabled := TRUE;
+  tbListenPort.Enabled := TRUE;
+  cbUseLogin.Enabled := TRUE;
+  cbUseRLogin.Enabled := TRUE;
+  cbUseLoginClick(Sender);
+  tbLoginName.Enabled := TRUE;
+  tbPassword.Enabled := TRUE;
+  tbGame.Enabled := TRUE;
+  TrayImage.Enabled := TRUE;
 
-//  tbHost.SetFocus;
+   tbHost.SetFocus;
 
-//  btnAdd.Enabled := FALSE;
-//  btnEdit.Enabled := FALSE;
-//  btnDelete.Enabled := FALSE;
+  btnAdd.Enabled := FALSE;
+  btnEdit.Enabled := FALSE;
+  btnDelete.Enabled := FALSE;
+  btnReset.Enabled := FALSE;
 
-//  cbGames.Enabled := FALSE;
-//  btnOKMain.Enabled := FALSE;
-//  btnCancelMain.Enabled := FALSE;
-//  btnSave.Enabled := TRUE;
-//  btnCancel.Enabled := TRUE;
+  cbGames.Enabled := FALSE;
+  btnOKMain.Enabled := FALSE;
+  btnCancelMain.Enabled := FALSE;
+  btnSave.Enabled := TRUE;
+  btnCancel.Enabled := TRUE;
 
-//  Edit := TRUE;
-//end;
+  Edit := TRUE;
+end;
 
 procedure TfrmSetup.btnResetClick(Sender: TObject);
 var
@@ -793,8 +799,12 @@ begin
       // don't throw an error if couldn't delete .cfg file
     end;
 
+    // mb - delete script data
+    ClearScriptData(cbGames.Text);
+
     // create new database
     S := 'data\' + tbDescription.Text + '.xdb';
+    //CreateDir('data\' + tbDescription.Text);
 
     try
       TWXDatabase.CreateDatabase(S, Head^);
@@ -803,15 +813,6 @@ begin
       cbGames.OnChange (Self);
       Exit;
     end;
-
-//    UpdateGameList('data\' + tbDescription.Text + '.xdb');
-//    TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).New := TRUE;
-
-//    FreeMem(Head);
-
-    // Reload the header into the form.
-    //cbGames.OnChange(Self);
-
   end;
 end;
 
@@ -819,7 +820,7 @@ end;
 procedure TfrmSetup.btnDeleteClick(Sender: TObject);
 var
   Result : Integer;
-  S, DB  : string;
+  S, DB, Name  : string;
 begin
   if (cbGames.ItemIndex > -1) then
   begin
@@ -828,6 +829,7 @@ begin
     if (Result = mrNo) then
       Exit;
 
+    Name := cbGames.Text;
     S := UpperCase('data\' + cbGames.Text + '.xdb');
     DB := UpperCase(TWXDatabase.DatabaseName);
 
@@ -859,7 +861,47 @@ begin
     // Reload the header into the form.
     cbGames.OnChange(Self);
 
+    // mb - delete script data
+    ClearScriptData(Name);
+    RemoveDir(FProgramDir + '\data\' + Name);
   end;
+end;
+
+procedure TfrmSetup.ClearScriptData(Name: string);
+var
+  Result : Integer;
+  dirList    : TStringList;
+  searchFile : TSearchRec;
+begin
+    Result := MessageDlg('Clear script data files for this database?', mtWarning, [mbYes, mbNo], 0);
+    if (Result = mrNo) then
+      Exit;
+
+    TWXServer.ClientMessage('Clearing script data files.');
+    dirList := TStringList.Create;
+    try
+      if findfirst(FProgramDir + '\*_' + Name + '*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(searchFile.Name);
+      until FindNext(searchFile) <> 0;
+      FindClose(searchFile);
+
+      if findfirst(FProgramDir + '\data\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(FProgramDir + '\data\' + Name + '\' + searchFile.Name);
+      until FindNext(searchFile) <> 0;
+      FindClose(searchFile);
+      //RemoveDir(FProgramDir + '\data\' + Name);
+
+      if findfirst(FProgramDir + '\scripts\Mombot4p\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(FProgramDir + '\scripts\Mombot4p\Games\' + Name + '\' + searchFile.Name);
+      until FindNext(searchFile) <> 0;
+      FindClose(searchFile);
+      RemoveDir(FProgramDir + '\scripts\Mombot4p\Games\' + Name);
+    finally
+      FindClose(searchFile);
+    end;
 end;
 
 procedure TfrmSetup.cbUseLoginClick(Sender: TObject);
@@ -894,6 +936,7 @@ begin
   btnAdd.Enabled := TRUE;
   btnDelete.Enabled := TRUE;
   btnEdit.Enabled := TRUE;
+  btnReset.Enabled := TRUE;
 
   cbGames.Enabled := TRUE;
   btnOKMain.Enabled := TRUE;

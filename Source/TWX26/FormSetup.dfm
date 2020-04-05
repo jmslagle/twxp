@@ -38,8 +38,6 @@ object frmSetup: TfrmSetup
     OnChanging = PageControlChanging
     object tabServer: TTabSheet
       Caption = 'Server'
-      ExplicitLeft = 8
-      ExplicitTop = 28
       object Panel1: TPanel
         Left = 22
         Top = 79
@@ -274,7 +272,7 @@ object frmSetup: TfrmSetup
         Height = 25
         Caption = '&Edit'
         TabOrder = 4
-        OnClick = btnResetClick
+        OnClick = btnEditClick
       end
       object btnReset: TButton
         Left = 178
@@ -283,7 +281,7 @@ object frmSetup: TfrmSetup
         Height = 25
         Caption = '&Reset'
         TabOrder = 5
-        OnClick = btnResetClick
+        OnClick = btnEditClick
       end
     end
     object tabProgram: TTabSheet
