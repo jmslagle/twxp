@@ -263,7 +263,7 @@ begin
   AddSystemQuickText('~F', '^[1;35m');
   AddSystemQuickText('~G', '^[1;36m');
   AddSystemQuickText('~H', '^[1;37m');
-  AddSystemQuickText('~i', '^[1;30m');
+  AddSystemQuickText('~i', '^[40m');
   AddSystemQuickText('~j', '^[41m');
   AddSystemQuickText('~k', '^[42m');
   AddSystemQuickText('~l', '^[43m');
@@ -271,6 +271,14 @@ begin
   AddSystemQuickText('~n', '^[45m');
   AddSystemQuickText('~o', '^[46m');
   AddSystemQuickText('~p', '^[47m');
+  AddSystemQuickText('~I', '^[5;40m');
+  AddSystemQuickText('~J', '^[5;41m');
+  AddSystemQuickText('~K', '^[5;42m');
+  AddSystemQuickText('~L', '^[5;43m');
+  AddSystemQuickText('~M', '^[5;44m');
+  AddSystemQuickText('~N', '^[5;45m');
+  AddSystemQuickText('~O', '^[5;46m');
+  AddSystemQuickText('~P', '^[5;47m');
   AddSystemQuickText('~!', '^[2J^[H');
   AddSystemQuickText('~@', chr(13) + '^[0m^[0K');
   AddSystemQuickText('~0', '^[0m');
@@ -283,13 +291,8 @@ begin
   AddSystemQuickText('~7', '^[0m^[1;37m');
   AddSystemQuickText('~8', '^[0m^[1;5;31m');
   AddSystemQuickText('~9', '^[0m^[30;47m');
-  AddSystemQuickText('~q', '^[0m^[5;34m');
-  AddSystemQuickText('~r', '^[0m^[34m');
-  AddSystemQuickText('~s', '^[0m^[30;41m');
-  AddSystemQuickText('~I', '^[0;34;47m');
-  AddSystemQuickText('~J', '^[31;47m');
-  AddSystemQuickText('~K', '^[1;33;44m');
-
+  AddSystemQuickText('~s', '[s');
+  AddSystemQuickText('~u', '[u');
 end;
 
 procedure TModServer.BeforeDestruction;
@@ -320,18 +323,27 @@ var
   QuickText : TQuickText;
   I : Integer;
 begin
+    // Store literal Tildes as null
+    Text := stringreplace(Text, '~~', chr(255), [rfReplaceAll]);
+
+    // Apply user QuickText strings
     for I := 0 to UserQuickText.Count - 1 do
     begin
       Text := stringreplace(Text, TQuickText(UserQuickText[I]).Search,
               TQuickText(UserQuickText[I]).Replace, [rfReplaceAll]);
     end;
 
+    // Apply system QuickText strings
     for I := 0 to SystemQuickText.Count - 1 do
     begin
       Text := stringreplace(Text, TQuickText(SystemQuickText[I]).Search,
               TQuickText(SystemQuickText[I]).Replace, [rfReplaceAll]);
     end;
 
+    // convert Null characters to literal ~ in final string
+    Text := stringreplace(Text, chr(255), '~', [rfReplaceAll]);
+
+    // replace "^[" with literal "<esc>[" in result
     result := stringreplace(Text, '^[', chr(27) + '[', [rfReplaceAll]);
 end;
 
@@ -351,6 +363,9 @@ procedure TModServer.AddQuickText(Search, Replace : string);
 var
   NewText : TQuickText;
 begin
+  // Make sure there is no existing User QuickText
+  ClearQuickText(Search);
+
   // build new User QuickText
   NewText := TQuickText.Create;
   NewText.Search  := Search;
