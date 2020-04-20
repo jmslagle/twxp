@@ -285,9 +285,9 @@ begin
   AddSystemQuickText('~1', '^[0m^[1;36m');
   AddSystemQuickText('~2', '^[0m^[1;33m');
   AddSystemQuickText('~3', '^[0m^[35m');
-  AddSystemQuickText('~4', '^[0m^[44m');
+  AddSystemQuickText('~4', '^[0m^[1;44m');
   AddSystemQuickText('~5', '^[0m^[32m');
-  AddSystemQuickText('~6', '^[0m^[1;5;31m');
+  AddSystemQuickText('~6', '^[0m^[1;5;37m');
   AddSystemQuickText('~7', '^[0m^[1;37m');
   AddSystemQuickText('~8', '^[0m^[1;5;31m');
   AddSystemQuickText('~9', '^[0m^[30;47m');

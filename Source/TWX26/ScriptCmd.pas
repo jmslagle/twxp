@@ -2475,14 +2475,14 @@ begin
       begin
         Alias  := StringReplace(Section, 'bot:', '', [rfReplaceAll, rfIgnoreCase]);
         BotName  := IniFile.ReadString(Section, 'Name', '');
-        ScriptFile  := IniFile.ReadString(Section, 'Name', '');
+        ScriptFile  := IniFile.ReadString(Section, 'Script', '');
 
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
-          if Pos(LowerCase(BotList[I]), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
-            BotList.add(Alias + '* ' + BotName)
+          if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
+            BotList.add(Format('~D>~C%-8s ~G%s', [Alias, BotName]))
           else
-            BotList.add(Alias + '  ' + BotName);
+            BotList.add(Format('~C %-8s ~G%s', [Alias, BotName]));
           end;
         end;
       end;
