@@ -44,7 +44,7 @@ const
   OP_DONT = #254;
 
 type
-  TClientType = (ctStandard, ctDeaf, ctRejected, ctMute);
+  TClientType = (ctStandard, ctDeaf, ctRejected, ctMute, ctStream);
   TDisplayMode = (ctSilent, ctQuiet, ctNormal, ctVerbose);
 
   TTelnetSocket = class(TTWXModule)
@@ -79,7 +79,9 @@ type
     FCurrentClient   : Integer;
     FBufferOut       : TStringList;
     FBufTimer        : TTimer;
+    FStreamEnabled,
     FAllowLerkers    : Boolean;
+    FLerkerAddress   : String;
     FAcceptExternal  : Boolean;
     FExternalAddress : String;
     FBroadCastMsgs   : Boolean;
@@ -100,8 +102,12 @@ type
     procedure SetListenPort(Value: Word);
 
     { IModServer }
+    function GetStreamEnabled: Boolean;
+    procedure SetStreamEnabled(Value: Boolean);
     function GetAllowLerkers: Boolean;
     procedure SetAllowLerkers(Value: Boolean);
+    function GetLerkerAddress: String;
+    procedure SetLerkerAddress(Value: String);
     function GetAcceptExternal: Boolean;
     procedure SetAcceptExternal(Value: Boolean);
     function GetExternalAddress: String;
@@ -144,7 +150,9 @@ type
 
   published
     property ListenPort: Word read GetListenPort write SetListenPort;
+    property StreamEnabled: Boolean read GetStreamEnabled write SetStreamEnabled;
     property AllowLerkers: Boolean read GetAllowLerkers write SetAllowLerkers;
+    property LerkerAddress: String read GetLerkerAddress write SetLerkerAddress;
     property AcceptExternal: Boolean read GetAcceptExternal write SetAcceptExternal;
     property ExternalAddress: String read GetExternalAddress write SetExternalAddress;
     property BroadCastMsgs: Boolean read GetBroadCastMsgs write SetBroadCastMsgs;
@@ -222,6 +230,8 @@ uses
 procedure TModServer.AfterConstruction;
 begin
   inherited;
+
+  Randomize();
 
   tcpServer := TServerSocket.Create(Self);
 
@@ -320,7 +330,6 @@ end;
 
 function TModServer.ApplyQuickText(Text : string) : string;
 var
-  QuickText : TQuickText;
   I : Integer;
 begin
     // Store literal Tildes as null
@@ -376,7 +385,6 @@ end;
 
 procedure TModServer.ClearQuickText(Search : string = '');
 var
-  NewText : TQuickText;
   I : Integer;
 begin
   if (Search = '') then
@@ -404,11 +412,32 @@ end;
 procedure TModServer.Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE);
 var
   I : Integer;
+  Stream : String;
+  InAnsi : Boolean;
 begin
   if (Length(Text) = 0) then
     Exit;
 
   Text := ApplyQuickText(Text);
+
+  Stream := Text;
+  for I := 0 to length(Stream) - 1 do
+  begin
+    if (Stream[I] = #27) then
+      InAnsi := TRUE;
+
+    if (InAnsi = FALSE) then
+      if (Stream[I] >= '0') and (Stream[I] <= '9') then
+        Stream[I] := chr(255);
+
+    if ((Stream[I] >= chr(65)) and (Stream[I] <= chr(90))) or ((Stream[I] >= chr(97)) and (Stream[I] <= chr(122))) then
+      InAnsi := FALSE;
+  end;
+
+  for I := 0 to 2 do
+    Stream := stringreplace(Stream,  chr(255) +  chr(255), chr(255), [rfReplaceAll]);
+
+  Stream := stringreplace(Stream,  chr(255), '1', [rfReplaceAll]);
 
   if not (Buffered) and (FBufferOut.Count > 0) then
   begin
@@ -424,7 +453,10 @@ begin
       if (AMarkEcho) and (FClientEchoMarks[I]) then
         tcpServer.Socket.Connections[I].SendText(#255 + #0 + Text + #255 + #1)
       else
-        tcpServer.Socket.Connections[I].SendText(Text);
+        if ClientTypes[I] = ctStream then
+          tcpServer.Socket.Connections[I].SendText(Stream)
+        else
+          tcpServer.Socket.Connections[I].SendText(Text);
       except
         OutputDebugString(PChar('Unexpected error sending broadcast message'));
       end;
@@ -504,7 +536,8 @@ const
   T_DONT = #255 + #254;
 var
   IniFile       : TIniFile;
-  LocalClient   : Boolean;
+  LocalClient,
+  Lerker        : Boolean;
   Index         : Integer;
   RemoteAddress,
   Address,
@@ -530,39 +563,53 @@ begin
 
      for Address in AddressList do
      begin
-        TempAddress := stringreplace(Address, '.*', '',[rfReplaceAll, rfIgnoreCase]);
-        if (Copy(RemoteAddress,1,length(TempAddress)) = TempAddress)
-        then
-          LocalClient := TRUE
+       if length(ExternalAddress) > 0 then
+       begin
+          TempAddress := stringreplace(Address, '.*', '',[rfReplaceAll, rfIgnoreCase]);
+          if (Copy(RemoteAddress,1,length(TempAddress)) = TempAddress)
+          then
+            LocalClient := TRUE
+       end;
+     end;
+
+     Lerker := FALSE;
+     AddressList.Clear();
+     ExtractStrings([' '],[], pchar(LerkerAddress), AddressList);
+
+     for Address in AddressList do
+     begin
+        // Allow globsl wildcard
+        if (Address = '*')  or (Address = '*.*.*.*') then
+          Lerker := TRUE
+        else
+          if length(LerkerAddress) > 0 then
+          begin
+            TempAddress := stringreplace(Address, '.*', '',[rfReplaceAll, rfIgnoreCase]);
+            if (Copy(RemoteAddress,1,length(TempAddress)) = TempAddress) then
+              Lerker := TRUE;
+          end;
      end;
    finally
      AddressList.Free;
    end;
 
-  if (not AcceptExternal) and (not AllowLerkers) and (RemoteAddress <> '127.0.0.1') then
-    begin
-      // User not allowed
-      Socket.SendText(ANSI_12 + 'External connections are disabled. Goodbye!');
-      Sleep(500);
-      FClientTypes[Index] := ctRejected;
-      Socket.Close();
-      if (BroadCastMsgs) then
-        Broadcast(endl + ANSI_12 + 'Remote connection rejected from: ' + ANSI_14 + RemoteAddress + endl);
-      exit;
-    end
-  else if ((AcceptExternal) or (AllowLerkers)) and (not LocalClient) then
-    begin
-      Socket.SendText(ANSI_12 + 'Lerkers are not welcome here. Goodbye!');
-      Sleep(500);
-      FClientTypes[Index] := ctRejected;
-      Socket.Close();
-      if (BroadCastMsgs) then
-        Broadcast(endl + ANSI_12 + 'Remote connection rejected from: ' + ANSI_14 + RemoteAddress + endl);
-      exit;
-    end;
+   if (RemoteAddress = '127.0.0.1') or
+      (AcceptExternal and LocalClient) or
+      (AllowLerkers and Lerker) then
+      Socket.SendText(endl + ANSI_13 + 'TWX Proxy Server ' + ANSI_11 + 'v' +
+        ProgramVersion + chr(ReleaseNumber + 96) + ANSI_7 + ' (' + ReleaseVersion + ')' + endl)
+   else
+   begin
+     // User not allowed
+     Socket.SendText(ANSI_12 + 'External connections are disabled. Goodbye ' + RemoteAddress + '!');
+     Sleep(500);
+     FClientTypes[Index] := ctRejected;
+     Socket.Close();
+     if (BroadCastMsgs) then
+       Broadcast(endl + ANSI_12 + 'Remote connection rejected from: ' + ANSI_14 + RemoteAddress + endl);
+     exit;
+   end;
 
-  Socket.SendText(endl + ANSI_13 + 'TWX Proxy Server ' + ANSI_11 + 'v' +
-                  ProgramVersion + chr(ReleaseNumber + 96) + ANSI_7 + ' (' + ReleaseVersion + ')' + endl);
 
   if (BroadCastMsgs) then
     Broadcast(endl + ANSI_2 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl + endl)
@@ -625,8 +672,12 @@ begin
     end
     else
     begin
-      FClientTypes[Index] := ctMute;
-      Socket.SendText(ANSI_12 + 'You are locked in view only mode' + ANSI_7 + endl + endl);
+      if StreamEnabled then
+        FClientTypes[Index] := ctStream
+      else
+        FClientTypes[Index] := ctMute;
+
+        Socket.SendText(ANSI_12 + 'You are locked in view only mode' + ANSI_7 + endl + endl);
     end;
 
     TWXInterpreter.ProgramEvent('Client connected', '', FALSE);
@@ -707,8 +758,9 @@ begin
 
   FCurrentClient := GetSocketIndex(Socket);
 
-  if (ClientTypes[FCurrentClient] = ctMute) then
-    Exit; // mute clients can't talk
+  if (ClientTypes[FCurrentClient] = ctMute) or
+     (ClientTypes[FCurrentClient] = ctStream) then
+    Exit; // mute / streaming clients can't talk
 
   // Process data for telnet commands
   if (TWXExtractor.ProcessOutBound(InString, FCurrentClient)) and (TWXClient.Connected) then
@@ -811,6 +863,16 @@ begin
   tcpServer.Active := FALSE;
 end;
 
+function TModServer.GetStreamEnabled: Boolean;
+begin
+  Result := FStreamEnabled;
+end;
+
+procedure TModServer.SetStreamEnabled(Value: Boolean);
+begin
+  FStreamEnabled := Value;
+end;
+
 function TModServer.GetAllowLerkers: Boolean;
 begin
   Result := FAllowLerkers;
@@ -819,6 +881,16 @@ end;
 procedure TModServer.SetAllowLerkers(Value: Boolean);
 begin
   FAllowLerkers := Value;
+end;
+
+function TModServer.GetLerkerAddress: String;
+begin
+  Result := FLerkerAddress;
+end;
+
+procedure TModServer.SetLerkerAddress(Value: String);
+begin
+  FLerkerAddress := Value;
 end;
 
 function TModServer.GetAcceptExternal: Boolean;

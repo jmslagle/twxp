@@ -114,6 +114,9 @@ type
     Label2: TLabel;
     TrayImage: TImage;
     btnReset: TButton;
+    Label24: TLabel;
+    tbLerkerAddress: TEdit;
+    cbStreamingMode: TCheckBox;
     procedure FormHide(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure btnOKMainClick(Sender: TObject);
@@ -139,6 +142,7 @@ type
     procedure cbAcceptExternalClick(Sender: TObject);
     procedure LoadIconImage(IconFile: String);
     procedure TrayImageClick(Sender: TObject);
+    procedure cbAcceptLerkerClick(Sender: TObject);
 
 
   private
@@ -198,7 +202,9 @@ begin
   cbCache.Checked := TWXDatabase.UseCache;
   // MB - Moved to database.
   //tbListenPort.Text := IntToStr(TWXServer.ListenPort);
+  cbStreamingMode.Checked := TWXServer.StreamEnabled;
   cbAllowLerkers.Checked := TWXServer.AllowLerkers;
+  tbLerkerAddress.Text := TWXServer.LerkerAddress;
   cbAcceptExternal.Checked := TWXServer.AcceptExternal;
   tbExternalAddress.Text := TWXServer.ExternalAddress;
   cbReconnect.Checked := TWXClient.Reconnect;
@@ -385,9 +391,21 @@ begin
   // MB - Moved to Database.
   //TWXServer.ListenPort := StrToIntDef(tbListenPort.Text, 3000);
   //TWXServer.Activate;
-  TWXServer.AllowLerkers := cbAllowLerkers.Checked;
-  TWXServer.AcceptExternal := cbAcceptExternal.Checked;
-  TWXServer.ExternalAddress := tbExternalAddress.Text;
+  TWXServer.StreamEnabled := cbStreamingMode.Checked;
+  if (TWXServer.AllowLerkers <> cbAllowLerkers.Checked) or
+     (TWXServer.LerkerAddress <> tbLerkerAddress.Text) or
+     (TWXServer.AcceptExternal <> cbAcceptExternal.Checked) or
+     (TWXServer.ExternalAddress <> tbExternalAddress.Text) then
+  begin
+    TWXServer.AllowLerkers := cbAllowLerkers.Checked;
+    TWXServer.LerkerAddress := tbLerkerAddress.Text;
+    TWXServer.AcceptExternal := cbAcceptExternal.Checked;
+    TWXServer.ExternalAddress := tbExternalAddress.Text;
+
+    TWXServer.Broadcast(ANSI_15 + 'Closing all client connections... Goodbye!' + endl);
+    TWXServer.Deactivate();
+    TWXServer.Activate()
+  end;
   TWXServer.BroadCastMsgs := cbBroadCast.Checked;
   TWXServer.LocalEcho := cbLocalEcho.Checked;
   TWXClient.Reconnect := cbReconnect.Checked;
@@ -427,7 +445,7 @@ begin
   if cbAcceptExternal.Checked then
   begin
     tbExternalAddress.Enabled := TRUE;
-    tbExternalAddress.Text := '';
+    tbExternalAddress.Text := TWXServer.ExternalAddress;
   end
   else
   begin
@@ -435,7 +453,21 @@ begin
     tbExternalAddress.Text := '';
     tbExternalAddress.Focused;
   end;
+end;
 
+procedure TfrmSetup.cbAcceptLerkerClick(Sender: TObject);
+begin
+  if cbAllowLerkers.Checked then
+  begin
+    tbLerkerAddress.Enabled := TRUE;
+    tbLerkerAddress.Text := TWXServer.LerkerAddress;
+  end
+  else
+  begin
+    tbLerkerAddress.Enabled := FALSE;
+    tbLerkerAddress.Text := '';
+    tbLerkerAddress.Focused;
+  end;
 end;
 
 procedure TfrmSetup.cbGamesChange(Sender: TObject);
@@ -870,7 +902,6 @@ end;
 procedure TfrmSetup.ClearScriptData(Name: string);
 var
   Result : Integer;
-  dirList    : TStringList;
   searchFile : TSearchRec;
 begin
     Result := MessageDlg('Clear script data files for this database?', mtWarning, [mbYes, mbNo], 0);
@@ -878,7 +909,6 @@ begin
       Exit;
 
     TWXServer.ClientMessage('Clearing script data files.');
-    dirList := TStringList.Create;
     try
       if findfirst(FProgramDir + '\*_' + Name + '*.*', faAnyFile, searchFile) = 0 then
       repeat

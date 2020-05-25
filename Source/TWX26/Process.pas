@@ -286,8 +286,6 @@ begin
 end;
 
 procedure TModExtractor.ProcessPrompt(Line : string);
-var
-  Head : TDataHeader;
 begin
   // This procedure checks command prompts.  It is called from both
   // processline and processinbound, as it can come in as part of

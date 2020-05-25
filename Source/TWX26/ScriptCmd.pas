@@ -2289,7 +2289,6 @@ var
   Found : Boolean;
   I     : Integer;
   Data  : TStringList;
-  Param   : TVarParam;
   Indexes : TStringArray;
 begin
   Found := False;
@@ -2461,7 +2460,6 @@ var
    Section     : String;
    BotList,
    SectionList : TStringList;
-   I : Integer;
 begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
 
@@ -2480,9 +2478,11 @@ begin
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
-            BotList.add(Format('~D>~C%-8s ~G%s', [Alias, BotName]))
+            //BotList.add(Format('~D>~C%-8s ~G%s', [Alias, BotName]))
+            BotList.add(Format('%-8s %s <ACTIVE>', [Alias, BotName]))
           else
-            BotList.add(Format('~C %-8s ~G%s', [Alias, BotName]));
+            //BotList.add(Format('~C %-8s ~G%s', [Alias, BotName]));
+            BotList.add(Format('%-8s %s', [Alias, BotName]));
           end;
         end;
       end;
@@ -3674,7 +3674,7 @@ Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s',
   SCCurrentColHolds(Indexes)]);
 end;
 
-function SCCurrentQSALL(Indexes : TStringArray) : string;
+function SCCurrentQSTAT(Indexes : TStringArray) : string;
 begin
 //Armd:Lmpt:GTorp:AtmDt:TWarp:Clks:Beacns:EPrb:MDis:PsPrb:PlScn:LRS
 Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s',
@@ -3708,6 +3708,45 @@ Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s
   SCCurrentScanType(Indexes)]);
 end;
 
+function SCBotList(Indexes : TStringArray) : string;
+var
+   IniFile     : TIniFile;
+   Alias,
+   BotName,
+   ScriptFile,
+   BotList,
+   Section     : String;
+   SectionList : TStringList;
+   I : Integer;
+begin
+  IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+
+  try
+    SectionList := TStringList.Create;
+    BotList := '';
+    IniFile.ReadSections(SectionList);
+    for Section in SectionList do
+    begin
+      if (Pos('bot:', LowerCase(Section)) = 1) then
+      begin
+        Alias  := StringReplace(Section, 'bot:', '', [rfReplaceAll, rfIgnoreCase]);
+        BotName  := IniFile.ReadString(Section, 'Name', '');
+        ScriptFile  := IniFile.ReadString(Section, 'Script', '');
+
+        if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
+        begin
+          BotList := BotList + Format('%-8s %s', [Alias, BotName]);
+          if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
+             BotList := BotList +  ' <ACTIVE>';
+        end;
+      end;
+    end;
+  finally
+  end;
+
+  Result := BotList;
+end;
+
 function SCActiveBot(Indexes : TStringArray) : string;
 begin
   Result := TWXInterpreter.ActiveBot;
@@ -3738,6 +3777,26 @@ begin
   Result := TWXExtractor.TW2002Ver;
 end;
 
+function SCSector_DeadEnd(Indexes : TStringArray) : string;
+var
+  SectIndex : Integer;
+  WarpsIn   : TList;
+begin
+  if (Length(Indexes) < 1) then
+    raise EScriptError.Create('Invalid parameters for SECTOR.WARPCOUNT[sector]');
+
+  ConvertToNumber(Indexes[0], SectIndex);
+  CheckSector(SectIndex);
+
+  WarpsIn := TWXDatabase.GetBackdoors(TWXDatabase.LoadSector(SectIndex), SectIndex);
+
+  if (TWXDatabase.Sectors[SectIndex].Warps = 1) and (WarpsIn.Count = 0) then
+    Result := '1'
+  else
+    Result := '0';
+
+  WarpsIn.Free;
+end;
 // *****************************************************************************
 //                             LIST BUILDER METHODS
 // *****************************************************************************
@@ -3857,13 +3916,15 @@ begin
     AddSysConstant('CURRENTANSIQUICKSTATS',SCCurrentQuickStats);
     AddSysConstant('CURRENTQUICKSTATS',SCCurrentQuickStats);
     AddSysConstant('CURRENTQS',SCCurrentQS);
-    AddSysConstant('CURRENTQSALL',SCCurrentQSALL);
+    AddSysConstant('CURRENTQSTAT',SCCurrentQSTAT);
+    AddSysConstant('BOTLIST',SCBotList);
     AddSysConstant('ACTIVEBOT',SCActiveBot);
     AddSysConstant('ACTIVEBOTSCRIPT',SCActiveBotScript);
     AddSysConstant('VERSION',SCTWXVersion);
     AddSysConstant('TWGSTYPE',SCTWGSTYPE);
     AddSysConstant('TWGSVER',SCTWGSVer);
     AddSysConstant('TW2002VER',SCTW2002Ver);
+    AddSysConstant('SECTOR.DEADEND', SCSector_DeadEnd);
   end;
 end;
 
@@ -4005,21 +4066,24 @@ begin
     AddCommand('GETDEAFCLIENTS', 1, 1, CmdGetDeafClients, [pkValue], pkValue);
     AddCommand('SETDEAFCLIENTS', 0, 1, CmdSetDeafClients, [pkValue], pkValue);
 
+    AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
+
     AddCommand('SAVEGLOBAL', 1, 1, CmdSaveGlobal, [pkValue], pkValue);
     AddCommand('LOADGLOBAL', 1, 1, CmdLoadGlobal, [pkValue], pkValue);
     AddCommand('CLEARGLOBAL', 0, 0, CmdClearGlobal, [], pkValue);
 
+    AddCommand('ADDQUICKTEXT', 2, 2, CmdAddQuickText, [pkValue], pkValue);
+    AddCommand('CLEARQUICKTEXT', 0, 1, CmdClearQuickText, [pkValue], pkValue);
+
     AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
     AddCommand('GETBOTLIST', 1, 1, CmdGetBotList, [pkVar], pkValue);
-    AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
+
     AddCommand('SETAUTOTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETAUTOTEXTTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
+
     AddCommand('REQVERSION', 1, 1, CmdReqVersion, [pkValue], pkValue);
     AddCommand('SORTARRAY', 1, 1, CmdSortArray, [pkValue], pkValue);
     AddCommand('MODULAS', 1, 1, CmdModulas, [pkValue], pkValue);
-
-    AddCommand('ADDQUICKTEXT', 2, 2, CmdAddQuickText, [pkValue], pkValue);
-    AddCommand('CLEARQUICKTEXT', 0, 1, CmdClearQuickText, [pkValue], pkValue);
 
 //    AddCommand('COPYDATABASE', 1, 1, CmdCopyDatabase, [pkValue], pkValue);
 //    AddCommand('CREATEDATABASE', 1, 1, CmdCreateDatabase, [pkValue], pkValue);

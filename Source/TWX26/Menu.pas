@@ -1141,10 +1141,12 @@ begin
 
     if (TWXServer.ClientTypes[I] = ctStandard) then
       M1 := 'STANDARD'
-    else if (TWXServer.ClientTypes[I] = ctStandard) then
+    else if (TWXServer.ClientTypes[I] = ctMute) then
       M1 := 'VIEW ONLY'
-    else if (TWXServer.ClientTypes[I] = ctStandard) then
-      M1 := 'DEAF';
+    else if (TWXServer.ClientTypes[I] = ctDeaf) then
+      M1 := 'DEAF'
+    else if (TWXServer.ClientTypes[I] = ctStream) then
+      M1 := 'STREAMING';
 
     M2 := M2 + M1 + endl;
     TWXServer.Broadcast(M2);
