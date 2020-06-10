@@ -183,6 +183,7 @@ end;
 
 procedure CheckSector(Index : Integer);
 begin
+
   if (Index <= 0) or (Index > TWXDatabase.DBHeader.Sectors) then
     raise EScriptError.Create('Sector index out of bounds');
 end;
@@ -4066,16 +4067,17 @@ begin
     AddCommand('GETDEAFCLIENTS', 1, 1, CmdGetDeafClients, [pkValue], pkValue);
     AddCommand('SETDEAFCLIENTS', 0, 1, CmdSetDeafClients, [pkValue], pkValue);
 
-    AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
-
     AddCommand('SAVEGLOBAL', 1, 1, CmdSaveGlobal, [pkValue], pkValue);
     AddCommand('LOADGLOBAL', 1, 1, CmdLoadGlobal, [pkValue], pkValue);
     AddCommand('CLEARGLOBAL', 0, 0, CmdClearGlobal, [], pkValue);
 
+    AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
+
+    AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
+
     AddCommand('ADDQUICKTEXT', 2, 2, CmdAddQuickText, [pkValue], pkValue);
     AddCommand('CLEARQUICKTEXT', 0, 1, CmdClearQuickText, [pkValue], pkValue);
 
-    AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
     AddCommand('GETBOTLIST', 1, 1, CmdGetBotList, [pkVar], pkValue);
 
     AddCommand('SETAUTOTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);

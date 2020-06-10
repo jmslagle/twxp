@@ -820,6 +820,14 @@ begin
     if S = DB then
       TWXDatabase.CloseDataBase;
 
+    // MB - check to see if the database is open in another instance
+    HFileRes := CreateFile(PChar(S),GENERIC_READ or GENERIC_WRITE,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+    if HFileRes = INVALID_HANDLE_VALUE then
+    Begin
+      MessageDlg('Error - Database is locked by anither instance.', mtWarning, [mbOK], 0);
+      Exit;
+    End;
+
     // delete selected database and refresh headers held in memory
     TWXServer.ClientMessage('Reseting database: ' + ANSI_7 + S);
     SetCurrentDir(FProgramDir);
@@ -851,8 +859,9 @@ end;
 
 procedure TfrmSetup.btnDeleteClick(Sender: TObject);
 var
-  Result : Integer;
+  Result       : Integer;
   S, DB, Name  : string;
+  HFileRes     : HFILE;
 begin
   if (cbGames.ItemIndex > -1) then
   begin
@@ -868,6 +877,14 @@ begin
     // close the current database if it is being deleted
     if S = DB then
       TWXDatabase.CloseDataBase;
+
+    // MB - check to see if the database is open in another instance
+    HFileRes := CreateFile(PChar(S),GENERIC_READ or GENERIC_WRITE,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+    if HFileRes = INVALID_HANDLE_VALUE then
+    Begin
+      MessageDlg('Error - Database is locked by anither instance.', mtWarning, [mbOK], 0);
+      Exit;
+    End;
 
     // delete selected database and refresh headers held in memory
     TWXServer.ClientMessage('Deleting database: ' + ANSI_7 + S);
