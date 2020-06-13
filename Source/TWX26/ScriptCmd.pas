@@ -2454,15 +2454,18 @@ end;
 
 function CmdGetBotList(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
-   IniFile     : TIniFile;
+   IniFile, INI : TIniFile;
    Alias,
-   BotName,
+   Name,
    ScriptFile,
-   Section     : String;
+   NameVar,
+   BotName,
+   Section      : String;
    BotList,
-   SectionList : TStringList;
+   SectionList  : TStringList;
 begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+  INI := TINIFile.Create(TWXGUI.ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
 
   try
     SectionList := TStringList.Create;
@@ -2473,17 +2476,23 @@ begin
       if (Pos('bot:', LowerCase(Section)) = 1) then
       begin
         Alias  := StringReplace(Section, 'bot:', '', [rfReplaceAll, rfIgnoreCase]);
-        BotName  := IniFile.ReadString(Section, 'Name', '');
+        Name  := IniFile.ReadString(Section, 'Name', '');
         ScriptFile  := IniFile.ReadString(Section, 'Script', '');
+        NameVar  := IniFile.ReadString(Section, 'NameVar', '');
+
+        if Length(NameVar) > 0 then
+          BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
+        else
+          BotName := '{}';
 
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
             //BotList.add(Format('~D>~C%-8s ~G%s', [Alias, BotName]))
-            BotList.add(Format('%-8s %s <ACTIVE>', [Alias, BotName]))
+            BotList.add(Format('%-8s %-8s %s <ACTIVE>', [Alias, BotName, Name]))
           else
             //BotList.add(Format('~C %-8s ~G%s', [Alias, BotName]));
-            BotList.add(Format('%-8s %s', [Alias, BotName]));
+            BotList.add(Format('%-8s %-8s %s', [Alias, BotName, Name]));
           end;
         end;
       end;
@@ -2497,6 +2506,7 @@ begin
   SectionList.Free;
   BotList.Free;
   IniFile.Free;
+  INI.Free;
 
   Result := caNone;
 end;
@@ -3711,37 +3721,46 @@ end;
 
 function SCBotList(Indexes : TStringArray) : string;
 var
-   IniFile     : TIniFile;
+   IniFile, INI : TIniFile;
    Alias,
-   BotName,
+   Name,
    ScriptFile,
+   NameVar,
+   BotName,
    BotList,
-   Section     : String;
-   SectionList : TStringList;
+   Section      : String;
+   SectionList  : TStringList;
    I : Integer;
 begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+  INI := TINIFile.Create(TWXGUI.ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
 
   try
     SectionList := TStringList.Create;
-    BotList := '';
     IniFile.ReadSections(SectionList);
     for Section in SectionList do
     begin
       if (Pos('bot:', LowerCase(Section)) = 1) then
       begin
         Alias  := StringReplace(Section, 'bot:', '', [rfReplaceAll, rfIgnoreCase]);
-        BotName  := IniFile.ReadString(Section, 'Name', '');
+        Name  := IniFile.ReadString(Section, 'Name', '');
         ScriptFile  := IniFile.ReadString(Section, 'Script', '');
+        NameVar  := IniFile.ReadString(Section, 'NameVar', '');
+
+        if Length(NameVar) > 0 then
+          BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
+        else
+          BotName := '{}';
 
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
-          BotList := BotList + Format('%-8s %s', [Alias, BotName]);
+          BotList := BotList + Format('%-8s %-8s %s', [Alias, BotName, Name]);
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
              BotList := BotList +  ' <ACTIVE>';
+          end;
+          BotList := BotList +  chr(13);
         end;
       end;
-    end;
   finally
   end;
 
@@ -3756,6 +3775,11 @@ end;
 function SCActiveBotScript(Indexes : TStringArray) : string;
 begin
   Result := TWXInterpreter.ActiveBotScript;
+end;
+
+function SCActiveBotName(Indexes : TStringArray) : string;
+begin
+  Result := TWXInterpreter.ActiveBotName;
 end;
 
 function SCTWXVersion(Indexes : TStringArray) : string;
@@ -3921,6 +3945,7 @@ begin
     AddSysConstant('BOTLIST',SCBotList);
     AddSysConstant('ACTIVEBOT',SCActiveBot);
     AddSysConstant('ACTIVEBOTSCRIPT',SCActiveBotScript);
+    AddSysConstant('ACTIVEBOTNAME',SCActiveBotName);
     AddSysConstant('VERSION',SCTWXVersion);
     AddSysConstant('TWGSTYPE',SCTWGSTYPE);
     AddSysConstant('TWGSVER',SCTWGSVer);

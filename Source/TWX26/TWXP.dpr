@@ -351,14 +351,13 @@ begin
 
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
       IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
+      IniFile.WriteString('Bot:Mom', 'NameVar', '$BOT~BOT_NAME');
       IniFile.WriteString('Bot:1045', 'Name', 'Legacy Mombot 3.1045');
       IniFile.WriteString('Bot:1045', 'Script', 'Mombot3\__mom_bot3_1045.cts');
-      IniFile.WriteString('Bot:1044', 'Name', 'Legacy Mombot 3.1044');
-      IniFile.WriteString('Bot:1044', 'Script', 'Mombot3\__mom_bot3_1044.ts');
-      IniFile.WriteString('Bot:Qu', 'Name', 'Quantum Qubot');
-      IniFile.WriteString('Bot:Qu', 'Script', 'Quantum\Qubot.cts');
+      IniFile.WriteString('Bot:1045', 'NameVar', '$BOT_NAME');
       IniFile.WriteString('Bot:Zed', 'Name', 'Zed Bot Unleashed');
       IniFile.WriteString('Bot:Zed', 'Script', 'z-authorise.cts,z-bot.cts');
+      IniFile.WriteString('Bot:Zed', 'NameVar', '$Z_BOTNAME');
 
       IniFile.WriteString('QuickLoad', '1_', 'Xide Pack1');
       IniFile.WriteString('QuickLoad', '2_', 'Xide Pack2');
@@ -386,10 +385,13 @@ begin
     IniFile := TIniFile.Create(ProgramDir + '\twxp.cfg');
 
     try
-      IniFile.WriteString('TWX Proxy', 'Upgrade', '2814.2814.1939.1939.1939');
+      IniFile.WriteString('TWX Proxy', 'Upgrade', '2020.06.11');
 
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
       IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
+      IniFile.WriteString('Bot:Mom', 'NameVar', '$BOT~BOT_NAME');
+      IniFile.WriteString('Bot:1045', 'NameVar', '$BOT_NAME');
+      IniFile.WriteString('Bot:Zed', 'NameVar', '$Z_BOTNAME');
     finally
       IniFile.Free;
     end;

@@ -113,6 +113,7 @@ type
     FLastScript,
     FActiveBot,
     FActiveBotScript,
+    FActiveBotNameVar,
     FProgramDir: string;
 
     function GetScript(Index : Integer) : TScript;
@@ -121,7 +122,7 @@ type
     function GetAutoRunText: string;
     procedure SetAutoRunText(Value: string);
     procedure OntmrTimeTimer(Sender: TObject);
-
+    function GetActiveBotName : String;
   protected
     { ITWXGlobals }
     function GetProgramDir: string;
@@ -153,6 +154,7 @@ type
     property LastScript : string read FLastScript;
     property ActiveBot : string read FActiveBot;
     property ActiveBotScript   : string read FActiveBotScript;
+    property ActiveBotName   : string read GetActiveBotName;
     property ScriptMenu : TMenuItem read FScriptMenu write FScriptMenu;
     property ScriptRef : TScriptRef read FScriptRef;
     property ProgramDir: string read GetProgramDir;
@@ -521,7 +523,11 @@ begin
        else
          Load('scripts\' + script, FALSE);
      end;
-      FActiveBotScript := ScriptName;
+     
+     FActiveBotScript := StringReplace(ScriptName, FProgramDir + '\scripts\', '', [rfReplaceAll]);
+     FActiveBot := '';
+     FActiveBotNameVar := '';
+
 
       // MB - Get the activescript name from the ini file.
       begin
@@ -532,9 +538,10 @@ begin
           for Section in SectionList do
           begin
             BotScript  := IniFile.ReadString(Section, 'Script', '');
-            if (Pos(LowerCase(ScriptName), LowerCase(BotScript)) = 1) then
+            if (Pos(LowerCase(FActiveBotScript), LowerCase(BotScript)) = 1) then
             begin
               FActiveBot := IniFile.ReadString(Section, 'Name', '');
+              FActiveBotNameVar := IniFile.ReadString(Section, 'NameVar', '');
             end;
           end;
         finally
@@ -549,6 +556,20 @@ begin
       ScriptList.free();
     end;
   end;
+end;
+
+function TModInterpreter.GetActiveBotName() : String;
+var
+  INI : TINIFile;
+begin
+  INI := TINIFile.Create(FProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
+
+  if Length(FActiveBotNameVar) > 0 then
+    result := INI.ReadString('Variables', FActiveBotNameVar, '0')
+  else
+    result := '';
+
+  INI.Free;
 end;
 
 procedure TModInterpreter.ProgramEvent(EventName, MatchText : string; Exclusive : Boolean);

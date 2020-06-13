@@ -799,9 +799,10 @@ end;
 
 procedure TfrmSetup.btnResetClick(Sender: TObject);
 var
-  Result : Integer;
-  S, DB  : string;
-  Head : PDataHeader;
+  Result   : Integer;
+  S, DB    : string;
+  Head     : PDataHeader;
+  HFileRes : HFILE;
 begin
   if (cbGames.ItemIndex > -1) then
   begin

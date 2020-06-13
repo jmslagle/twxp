@@ -291,6 +291,10 @@ object frmSetup: TfrmSetup
     object tabProgram: TTabSheet
       Caption = 'Program'
       ImageIndex = 4
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Label11: TLabel
         Left = 16
         Top = 29
