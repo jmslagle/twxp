@@ -354,7 +354,7 @@ begin
       IniFile.WriteString('Bot:Mom', 'NameVar', '$BOT~BOT_NAME');
       IniFile.WriteString('Bot:1045', 'Name', 'Legacy Mombot 3.1045');
       IniFile.WriteString('Bot:1045', 'Script', 'Mombot3\__mom_bot3_1045.cts');
-      IniFile.WriteString('Bot:1045', 'NameVar', '$BOT_NAME');
+      IniFile.WriteString('Bot:1045', 'NameVar', 'FILE:_MOM_{GAME}.bot');
       IniFile.WriteString('Bot:Zed', 'Name', 'Zed Bot Unleashed');
       IniFile.WriteString('Bot:Zed', 'Script', 'z-authorise.cts,z-bot.cts');
       IniFile.WriteString('Bot:Zed', 'NameVar', '$Z_BOTNAME');
@@ -390,7 +390,7 @@ begin
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
       IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
       IniFile.WriteString('Bot:Mom', 'NameVar', '$BOT~BOT_NAME');
-      IniFile.WriteString('Bot:1045', 'NameVar', '$BOT_NAME');
+      IniFile.WriteString('Bot:1045', 'NameVar', 'FILE:_MOM_{GAME}.bot');
       IniFile.WriteString('Bot:Zed', 'NameVar', '$Z_BOTNAME');
     finally
       IniFile.Free;

@@ -2455,6 +2455,7 @@ end;
 function CmdGetBotList(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
    IniFile, INI : TIniFile;
+   FileName,
    Alias,
    Name,
    ScriptFile,
@@ -2462,7 +2463,8 @@ var
    BotName,
    Section      : String;
    BotList,
-   SectionList  : TStringList;
+   SectionList,
+   FileData     : TStringList;
 begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
   INI := TINIFile.Create(TWXGUI.ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
@@ -2480,19 +2482,34 @@ begin
         ScriptFile  := IniFile.ReadString(Section, 'Script', '');
         NameVar  := IniFile.ReadString(Section, 'NameVar', '');
 
+         BotName := '{}';
         if Length(NameVar) > 0 then
-          BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
-        else
-          BotName := '{}';
+          if Pos('file:', LowerCase(NameVar)) = 0 then
+            BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
+          else
+          begin
+            FileName := StringReplace(NameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
+            FileName := StringReplace(FileName, '{GAME}', StringReplace(StripFileExtension(TWXDatabase.DatabaseName),'data\', '', [rfReplaceAll, rfIgnoreCase]), [rfReplaceAll, rfIgnoreCase]);
+            if (FileExists(TWXGUI.ProgramDir + '\' + FileName)) then
+            begin
+              try
+                fileData := TStringList.Create;
+                fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
+                BotName := '{' + fileData[0] + '}';
+              finally
+                fileData.Free;
+              end;
+            end;
+          end;
 
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
             //BotList.add(Format('~D>~C%-8s ~G%s', [Alias, BotName]))
-            BotList.add(Format('%-8s %-8s %s <ACTIVE>', [Alias, BotName, Name]))
+            BotList.add(Format('%-8s %-6s %s <ACTIVE>', [BotName, Alias, Name]))
           else
             //BotList.add(Format('~C %-8s ~G%s', [Alias, BotName]));
-            BotList.add(Format('%-8s %-8s %s', [Alias, BotName, Name]));
+            BotList.add(Format('%-8s %-6s %s', [BotName, Alias, Name]));
           end;
         end;
       end;
@@ -2529,7 +2546,7 @@ function CmdSetAutoTrigger(Script : TObject; Params : array of TCmdParam) : TCmd
 var
   Value : Integer;
 begin
-  // CMD: setTextLineTrigger <name> <label> [<value>]
+  // CMD: setAutoTrigger <name> <label> [<value>]
 
   // mb - set default lifecycle to 1 if not present
   if (Length(Params) < 4) then
@@ -2574,9 +2591,67 @@ begin
   end;
 end;
 
-function CmdSortArray(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+function CmdSort(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I     : Integer;
+  S     : String;
+  Data  : TStringList;
+  Indexes : TStringArray;
 begin
+  //CMD: SortArray <Array> <Sorted>
+  //     Sorts a single dimention array.
 
+  Data :=  TStringList.Create;
+  I := 1;
+
+  repeat
+  begin
+      SetLength(Indexes, 1);
+      Indexes[0] := IntToStr(I);
+
+      S :=  TVarParam(Params[0]).GetIndexVar(Indexes).Value;
+      if S <> '0' then
+        Data.Add(S);
+      I := I + 1;
+  end;
+  until S = '0';
+  Data.Sort;
+
+  Params[1].Value := IntToStr(Data.Count);
+  TVarParam(Params[1]).SetArrayFromStrings(Data);
+  Result := caNone;
+end;
+
+function CmdFind(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Found : Boolean;
+  I,
+  Index : Integer;
+  S     : String;
+  Data  : TStringList;
+  Indexes : TStringArray;
+begin
+  //CMD: Find <Array> <Value> <Index>
+  //     Finds a value in a sorted array.
+
+  Data :=  TStringList.Create;
+  I := 1;
+
+  repeat
+  begin
+      SetLength(Indexes, 1);
+      Indexes[0] := IntToStr(I);
+
+      S :=  TVarParam(Params[0]).GetIndexVar(Indexes).Value;
+      if S <> '0' then
+        Data.Add(S);
+      I := I + 1;
+  end;
+  until S = '0';
+  Data.Sort;
+  Data.Find(Params[1].Value, Index);
+
+  Params[2].DecValue := Index + 1;
   Result := caNone;
 end;
 
@@ -3619,16 +3694,16 @@ begin
   Result := TWXExtractor.CurrentShipClass
 end;
 
-function SCCurrentQuickStats(Indexes : TStringArray) : string;
+function SCCurrentAnsiQuickStats(Indexes : TStringArray) : string;
 begin
 
  Result := Format(
-   'SECT  = %-11s|HLD = %-4s|FIGS = %-6s|ARMID = %-4s|TWARP = %s'+#13+
-   'TURNS = %-11s|ORE = %-4s|SHLD = %-6s|LMPIT = %-4s|PLSCN = %s'+#13+
-   'CREDS = %-11s|ORG = %-4s|PHOT = %-6s|GTORP = %-4s|LRS   = %s'+#13+
-   'ALN   = %-11s|EQU = %-4s|CRBO = %-6s|ATMDT = %-4s|PSPRB = %s'+#13+
-   'EXP   = %-11s|COL = %-4s|MDIS = %-6s|BEACN = %-4s|EPRB  = %s'+#13+
-   'SHIP  = %-4s '+#13,
+   '~0~5SECT  ~2= ~1%-11s~3|~5HLD ~2= ~1%-4s~3|~5FIGS ~2= ~1%-6s~3|~5ARMID ~2= ~1%-4s~3|~5TWARP ~2= ~1%s'+#13+
+   '~5TURNS ~2= ~1%-11s~3|~5ORE ~2= ~1%-4s~3|~5SHLD ~2= ~1%-6s~3|~5LMPIT ~2= ~1%-4s~3|~5PLSCN ~2= ~1%s'+#13+
+   '~5CREDS ~2= ~1%-11s~3|~5ORG ~2= ~1%-4s~3|~5PHOT ~2= ~1%-6s~3|~5GTORP ~2= ~1%-4s~3|~5LRS   ~2= ~1%s'+#13+
+   '~5ALN   ~2= ~1%-11s~3|~5EQU ~2= ~1%-4s~3|~5CRBO ~2= ~1%-6s~3|~5ATMDT ~2= ~1%-4s~3|~5PSPRB ~2= ~1%s'+#13+
+   '~5EXP   ~2= ~1%-11s~3|~5COL ~2= ~1%-4s~3|~5MDIS ~1= ~1%-6s~3|~5BEACN ~2= ~1%-4s~3|~5EPRB  ~2= ~1%s'+#13+
+   '~5SHIP  ~2= ~1%-4s ~3%-8s'+#13,
   [SCCurrentSector(Indexes),
   SCCurrentTotalHolds(Indexes),
   SCCurrentFighters(Indexes),
@@ -3659,7 +3734,18 @@ begin
   SCCurrentBeacons(Indexes),
   SCCurrentEprobes(Indexes),
 
-  SCCurrentShipNumber(Indexes)]);
+  SCCurrentShipNumber(Indexes),
+  SCCurrentShipClass(Indexes)]);
+end;
+
+function SCCurrentQuickStats(Indexes : TStringArray) : string;
+var
+  qs : string;
+begin
+  qs := SCCurrentAnsiQuickStats(Indexes);
+  qs := TWXServer.ApplyQuickText(qs);
+  TWXExtractor.StripANSI(qs);
+  Result := qs;
 end;
 
 function SCCurrentQS(Indexes : TStringArray) : string;
@@ -3722,6 +3808,7 @@ end;
 function SCBotList(Indexes : TStringArray) : string;
 var
    IniFile, INI : TIniFile;
+   FileName,
    Alias,
    Name,
    ScriptFile,
@@ -3731,6 +3818,7 @@ var
    Section      : String;
    SectionList  : TStringList;
    I : Integer;
+   FileData : TStringList;
 begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
   INI := TINIFile.Create(TWXGUI.ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
@@ -3747,14 +3835,29 @@ begin
         ScriptFile  := IniFile.ReadString(Section, 'Script', '');
         NameVar  := IniFile.ReadString(Section, 'NameVar', '');
 
+        BotName := '{}';
         if Length(NameVar) > 0 then
-          BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
-        else
-          BotName := '{}';
+          if Pos('file:', LowerCase(NameVar)) = 0 then
+            BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
+          else
+          begin
+            FileName := StringReplace(NameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
+            FileName := StringReplace(FileName, '{GAME}', StringReplace(StripFileExtension(TWXDatabase.DatabaseName),'data\', '', [rfReplaceAll, rfIgnoreCase]), [rfReplaceAll, rfIgnoreCase]);
+            if (FileExists(TWXGUI.ProgramDir + '\' + FileName)) then
+            begin
+              try
+                fileData := TStringList.Create;
+                fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
+                BotName := '{' + fileData[0] + '}';
+              finally
+                fileData.Free;
+              end;
+            end;
+          end;
 
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
-          BotList := BotList + Format('%-8s %-8s %s', [Alias, BotName, Name]);
+          BotList := BotList + Format('%-8s %-6s %s', [BotName, Alias, Name]);
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
              BotList := BotList +  ' <ACTIVE>';
           end;
@@ -3938,7 +4041,7 @@ begin
     AddSysConstant('CURRENTCORP', SCCurrentCorp);
     AddSysConstant('CURRENTSHIPNUMBER', SCCurrentShipNumber);
     AddSysConstant('CURRENTSHIPCLASS', SCCurrentShipClass);
-    AddSysConstant('CURRENTANSIQUICKSTATS',SCCurrentQuickStats);
+    AddSysConstant('CURRENTANSIQUICKSTATS',SCCurrentAnsiQuickStats);
     AddSysConstant('CURRENTQUICKSTATS',SCCurrentQuickStats);
     AddSysConstant('CURRENTQS',SCCurrentQS);
     AddSysConstant('CURRENTQSTAT',SCCurrentQSTAT);
@@ -4109,7 +4212,8 @@ begin
     AddCommand('SETAUTOTEXTTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
 
     AddCommand('REQVERSION', 1, 1, CmdReqVersion, [pkValue], pkValue);
-    AddCommand('SORTARRAY', 1, 1, CmdSortArray, [pkValue], pkValue);
+    AddCommand('SORT', 2, 2, CmdSort, [pkValue], pkValue);
+    AddCommand('FIND', 3, 3, CmdFind, [pkValue], pkValue);
     AddCommand('MODULAS', 1, 1, CmdModulas, [pkValue], pkValue);
 
 //    AddCommand('COPYDATABASE', 1, 1, CmdCopyDatabase, [pkValue], pkValue);
@@ -4120,6 +4224,7 @@ begin
 //    AddCommand('LOADDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
 //    AddCommand('RESETDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
 //    AddCommand('NEWINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+//    AddCommand('CLOSEINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
 
 
 
