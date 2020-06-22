@@ -4214,7 +4214,9 @@ begin
     AddCommand('REQVERSION', 1, 1, CmdReqVersion, [pkValue], pkValue);
     AddCommand('SORT', 2, 2, CmdSort, [pkValue], pkValue);
     AddCommand('FIND', 3, 3, CmdFind, [pkValue], pkValue);
-    AddCommand('MODULAS', 1, 1, CmdModulas, [pkValue], pkValue);
+    AddCommand('MODULAS', 2, 2, CmdModulas, [pkValue], pkValue);
+    AddCommand('DIREXISTS', 1, 1, CmdModulas, [pkValue], pkValue);
+    AddCommand('LABELEXISTS', 1, 1, CmdModulas, [pkValue], pkValue);
 
 //    AddCommand('COPYDATABASE', 1, 1, CmdCopyDatabase, [pkValue], pkValue);
 //    AddCommand('CREATEDATABASE', 1, 1, CmdCreateDatabase, [pkValue], pkValue);

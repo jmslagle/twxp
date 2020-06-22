@@ -1061,7 +1061,7 @@ type
        + OP_XOR
        + OP_NOTEQUAL, V1, V2, Op)) then
        if not (SplitOperator(Equation, '+-', V1, V2, Op)) then
-         if not (SplitOperator(Equation, '*/', V1, V2, Op)) then
+         if not (SplitOperator(Equation, '*/%', V1, V2, Op)) then
            Split := FALSE;
 
       if (Split) then
@@ -1131,6 +1131,12 @@ type
         // division (/): divide Value1 by Value2
         RecurseCmd(['SETVAR', Result, Value1], Line, ScriptID);
         RecurseCmd(['DIVIDE', Result, Value2], Line, ScriptID);
+      end
+      else if (Branch^.Op = '%') then
+      begin
+        // division (%): modulas Value1 by Value2
+        RecurseCmd(['SETVAR', Result, Value1], Line, ScriptID);
+        RecurseCmd(['MODULAS', Result, Value2], Line, ScriptID);
       end
       else if (Branch^.Op = '&') then
         // concatenation (&): concatenate both values
@@ -1570,6 +1576,7 @@ begin
      (C = '-') or
      (C = '*') or
      (C = '/') or
+     (C = '%') or
      (C = '&') or
      (C = OP_GREATEREQUAL) or
      (C = OP_LESSEREQUAL) or
@@ -1630,7 +1637,7 @@ begin
             // mb - handle asignment operators
             if not (InQuote) and (LineText[I] = '=') then
             begin
-              if pos(last,':*/+-') > 0 then
+              if pos(last,':*/%+-') > 0 then
               begin
                 ParamLine.Clear;
 
@@ -1640,6 +1647,8 @@ begin
                   ParamLine.Append('MULTIPLY');
                 if Last = '/' then
                   ParamLine.Append('DIVIDE');
+                if Last = '%' then
+                  ParamLine.Append('MODULAS');
                 if Last = '+' then
                   ParamLine.Append('ADD');
                 if Last = '-' then
