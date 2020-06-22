@@ -2696,6 +2696,35 @@ begin
   Result := caNone;
 end;
 
+function CmdDirExists(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  F1,
+  F2 : integer;
+begin
+  // CMD: dirExists var <filename>
+
+  if (directoryexists(Params[1].Value)) then
+    Params[0].Value := '1'
+  else
+    Params[0].Value := '0';
+
+  Result := caNone;
+end;
+
+function CmdLabelExists(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  F1,
+  F2 : integer;
+begin
+  // CMD: fileExists var <filename>
+
+  if (TScript(Script).LabelExists(Params[1].Value)) then
+    Params[0].Value := '1'
+  else
+    Params[0].Value := '0';
+  Result := caNone;
+end;
+
 
 
 
@@ -4215,8 +4244,11 @@ begin
     AddCommand('SORT', 2, 2, CmdSort, [pkValue], pkValue);
     AddCommand('FIND', 3, 3, CmdFind, [pkValue], pkValue);
     AddCommand('MODULAS', 2, 2, CmdModulas, [pkValue], pkValue);
-    AddCommand('DIREXISTS', 1, 1, CmdModulas, [pkValue], pkValue);
-    AddCommand('LABELEXISTS', 1, 1, CmdModulas, [pkValue], pkValue);
+    AddCommand('DIREXISTS', 2, 2, CmdDirExists, [pkValue], pkValue);
+    AddCommand('LABELEXISTS', 2, 2, CmdLabelExists, [pkValue], pkValue);
+
+//    AddCommand('OPENINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+//    AddCommand('CLOSEINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
 
 //    AddCommand('COPYDATABASE', 1, 1, CmdCopyDatabase, [pkValue], pkValue);
 //    AddCommand('CREATEDATABASE', 1, 1, CmdCreateDatabase, [pkValue], pkValue);
@@ -4224,9 +4256,8 @@ begin
 //    AddCommand('EDITDATABASE', 1, 1, CmdEditDatabase, [pkValue], pkValue);
 //    AddCommand('LISTDATABASES', 1, 1, CmdListDatabases, [pkValue], pkValue);
 //    AddCommand('LOADDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+//    AddCommand('CLOSEDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
 //    AddCommand('RESETDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
-//    AddCommand('NEWINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
-//    AddCommand('CLOSEINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
 
 
 

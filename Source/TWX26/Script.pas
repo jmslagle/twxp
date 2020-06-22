@@ -221,6 +221,7 @@ type
     procedure DumpTriggers;
     procedure AddMenu(MenuItem : TObject);
     procedure GotoLabel(L : string);
+    function LabelExists(L : string): Boolean;
     function TextLineEvent(const Text : string; ForceTrigger : Boolean) : Boolean;
     function AutoTextEvent(const Text : string; ForceTrigger : Boolean) : Boolean;
     function TextEvent(const Text : string; ForceTrigger : Boolean) : Boolean;
@@ -1742,6 +1743,30 @@ begin
 
   raise EScriptError.Create('Goto label not found ''' + L + '''');
 end;
+
+function TScript.LabelExists(L : string) : Boolean;
+var
+  Error : Boolean;
+  I     : Integer;
+begin
+  // seek label with name L
+  L := UpperCase(Copy(L, 2, Length(L)));
+  Cmp.ExtendName(L, ExecScriptID);
+
+  if (Cmp.LabelCount > 0) then
+    for I := 0 to Cmp.LabelCount - 1 do
+    begin
+      if (Cmp.Labels[I].Name = L) then
+      begin
+        Result := TRUE;
+        Exit;
+      end;
+    end;
+
+  Result := FALSE;
+end;
+
+
 
 procedure TScript.Gosub(LabelName : String);
 begin

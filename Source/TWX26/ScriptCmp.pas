@@ -577,9 +577,22 @@ end;
 
 procedure TScriptCmp.BuildLabel(const Name : string; Location : Integer);
 var
+  I        : Integer;
+  CurLabel,
   NewLabel : TScriptLabel;
 begin
   // create a new label - label's constructor will add it to label list automatically
+
+  // mb - throw exception on duplicate label
+  for i := 0 to FLabelList.Count - 1 do
+  begin
+    CurLabel := FLabelList[i];
+    if (pos(':', Name) = 0) and (CurLabel.Name = Name) then
+      raise EScriptError.Create('Duplicate label found (:' + Name + ')');
+
+  end;
+
+
 
   NewLabel := TScriptLabel.Create;
   NewLabel.Name := Name;
