@@ -183,7 +183,7 @@ begin
 
   PersistenceManager.LoadStateValues;
   TWXGUI.DatabaseName := '';
-
+  TWXGUI.StartupScripts := TStringList.Create;
   // check command line values
   I := 1;
   while (I <= ParamCount) do
@@ -196,7 +196,11 @@ begin
     //      for windows file association.
     if (Copy(Switch, 1, 1) <> '/') and (Length(Switch) > 0) then
     begin
-      TWXGUI.DatabaseName := StripFileExtension(ShortFilename(Switch));
+      if ExtractFileExt(Switch) = '.XDB' then
+        TWXGUI.DatabaseName := StripFileExtension(ShortFilename(Switch))
+      else
+        TWXGUI.StartupScripts.Add(Switch);
+
     end
     else if (Copy(Switch, 1, 2) = '/P') and (Length(Switch) > 2) then
     begin
@@ -258,13 +262,20 @@ procedure FinaliseProgram;
 var
   ObjectName : String;
   I          : Integer;
+  IniFile     : TIniFile;
 begin
   try
-    // MB - Save the current database name.
+    // MB - Save the current database name amd Clost the database.
     TWXGUI.DatabaseName := StripFileExtension(ShortFilename(TWXDatabase.DatabaseName));
-
-    // MB - Close database before saving module states to prevent unhandled exception
     TWXDatabase.CloseDatabase;
+
+    IniFile := TIniFile.Create(ProgramDir + '\twxp.cfg');
+    try
+      Inifile.DeleteKey('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)));
+    finally
+      Inifile.Free;
+    end;
+
 
     PersistenceManager.SaveStateValues;
   except
@@ -335,10 +346,6 @@ end;
 procedure CreateConfig();
 var
    IniFile     : TIniFile;
-   BotName,
-   Script,
-   Section     : String;
-   SectionList : TStringList;
 begin
   ProgramDir := GetCurrentDir;
 
@@ -347,7 +354,8 @@ begin
     IniFile := TIniFile.Create(ProgramDir + '\twxp.cfg');
 
     try
-      IniFile.WriteString('TWX Proxy', 'Upgrade', '2814.2814.1939.1939.1939');
+      IniFile.WriteString('TWX Proxy', 'Upgrade', '2020.06.11');
+      IniFile.WriteString('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)), IntToStr(GetCurrentProcessId()));
 
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
       IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
@@ -386,6 +394,7 @@ begin
 
     try
       IniFile.WriteString('TWX Proxy', 'Upgrade', '2020.06.11');
+      IniFile.WriteString('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)), IntToStr(GetCurrentProcessId()));
 
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
       IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
@@ -400,8 +409,10 @@ begin
 end;
 
 var
+  I          : Integer;
   S          : TSearchRec;
   fileDate   : Integer;
+  FileName,
   dbFile     : string;
   HFileRes   : HFILE;
 begin
@@ -413,7 +424,6 @@ begin
   Application.Title := 'TWX Proxy';
   //Application.CreateForm(TfrmChangeIcon, FormChangeIcon);
   SetCurrentDir(ExtractFilePath(Application.ExeName));
-  CreateConfig();
   InitProgram;
 
   if TWXGUI.DatabaseName <> '' then
@@ -448,6 +458,21 @@ begin
 
   if TWXDatabase.DataBaseOpen then
     TWXServer.Activate;
+
+  for I := 0 to TWXGUI.StartupScripts.Count - 1 do
+  begin
+    Filename := ProgramDir + '\dcripts\' + TWXGUI.StartupScripts[i];
+
+    if (Pos('bot', LowerCase(ExtractFileName(Filename))) > 0) and
+       (Pos('switchbot', LowerCase(ExtractFileName(Filename))) = 0)
+    then
+      TWXInterpreter.SwitchBot(Filename, True)
+    else
+      TWXInterpreter.Load(Filename, False)
+  end;
+
+  TWXGUI.StartupScripts.Free;
+  CreateConfig();
 
   try
     // we don't use the TApplication message loop, as it requires a main form

@@ -28,6 +28,7 @@ unit GUI;
 interface
 
 uses
+  Classes,
   Core,
   Dialogs,
   Script,
@@ -47,6 +48,7 @@ type
   private
     FProgramDir: string;
     FDatabaseName: string;
+    FStartupScripts: TStringList;
     FGUIForms: array[TGUIFormType] of TForm;
     FConnected: Boolean;
     FFirstLoad: Boolean;
@@ -58,6 +60,8 @@ type
     procedure SetFormEnabled(FormType: TGUIFormType; Enabled: Boolean);
     procedure SetDatabaseName(const Value: string);
     function GetDatabaseName: String;
+    procedure SetStartupScripts(const Value: TStringList);
+    function GetStartupScripts: TStringList;
     procedure SetTrayHint(const Value: string);
     function GetRecording: Boolean;
     procedure SetRecording(Value: Boolean);
@@ -82,6 +86,7 @@ type
     property Recording: Boolean read GetRecording write SetRecording;
   published
     property DatabaseName: string read GetDatabaseName write SetDatabaseName;
+    property StartupScripts: TStringList read GetStartupScripts write SetStartupScripts;
     property TrayHint: string write SetTrayHint;
     property FirstLoad: Boolean read FFirstLoad write FFirstLoad;
   end;
@@ -143,9 +148,21 @@ begin
   Result := FDatabaseName;
 end;
 
+procedure TModGUI.SetStartupScripts(const Value : TStringList);
+begin
+  FStartupScripts := Value;
+  //TfrmMain(GUIForms[gfMain]).DatabaseName := Value;
+end;
+
+function TModGUI.GetStartupScripts: TStringList;
+begin
+  Result := FStartupScripts;
+end;
+
 procedure TModGUI.SetTrayHint(const Value : string);
 begin
   TfrmMain(GUIForms[gfMain]).TrayHint := Value;
+  TfrmMain(GUIForms[gfMain]).Caption := DatabaseName;
 end;
 
 procedure TModGUI.LoadTrayIcon(const Value : string);

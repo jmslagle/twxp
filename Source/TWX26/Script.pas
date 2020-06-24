@@ -385,7 +385,8 @@ begin
   // MB - Allow reconnect after manual disconnect when launching a script
   TWXClient.UserDisconnect := FALSE;
 
-  if (Copy(UpperCase(Filename), Length(Filename) - 3, 4) = '.CTS') then
+  if (Copy(UpperCase(Filename), Length(Filename) - 3, 4) = '.CTS') or
+     (Copy(UpperCase(Filename), Length(Filename) - 3, 4) = '.TWX') then
   begin
     if not (Silent) then
       TWXServer.ClientMessage('Loading script: ' + ANSI_7 + Filename);

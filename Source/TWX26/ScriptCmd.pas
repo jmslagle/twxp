@@ -50,6 +50,7 @@ uses
   Core,
   Classes,
   SysUtils,
+  ShellApi,
   Menu,
   DataBase,
   Utility,
@@ -2559,8 +2560,6 @@ begin
 end;
 
 function CmdSetAutoLineTrigger(Script : TObject; Params : array of TCmdParam) : TCmdAction;
-var
-  Value : Integer;
 begin
   // CMD: setTextLineTrigger <name> <label> [<value>]
 
@@ -2624,7 +2623,6 @@ end;
 
 function CmdFind(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
-  Found : Boolean;
   I,
   Index : Integer;
   S     : String;
@@ -2697,9 +2695,6 @@ begin
 end;
 
 function CmdDirExists(Script : TObject; Params : array of TCmdParam) : TCmdAction;
-var
-  F1,
-  F2 : integer;
 begin
   // CMD: dirExists var <filename>
 
@@ -2712,9 +2707,6 @@ begin
 end;
 
 function CmdLabelExists(Script : TObject; Params : array of TCmdParam) : TCmdAction;
-var
-  F1,
-  F2 : integer;
 begin
   // CMD: fileExists var <filename>
 
@@ -2725,7 +2717,132 @@ begin
   Result := caNone;
 end;
 
+function CmdOpenInstance(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I   : Integer;
+  P   : String;
+begin
+  for I := 0 to Length(Params) - 1 do
+    P := P + Params[I].Value + ' ';
 
+  // CMD: OpenInstance <filename> <script>
+  ShellExecute(0,'open', pchar(TWXGUI.ProgramDir + '\twxp.exe'),
+  pchar(P), nil, SW_SHOWNORMAL) ;
+
+  Result := caNone;
+end;
+
+function CmdCloseInstance(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+const
+  WM_CLOSE = $0010;
+  WM_QUIT = $0012;
+var
+  I,
+  ProcessID    : DWORD;
+  Instance     : String;
+  InstanceList : TStringList;
+  IniFile      : TIniFile;
+  Handle       : THandle;
+begin
+
+  if Params[0].Value = 'ALL' then
+  begin
+    try
+      IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+      InstanceList := TStringList.Create;
+      IniFile.ReadSection('Instances',InstanceList);
+      for Instance in InstanceList do
+      begin
+        ProcessID := IniFile.ReadInteger('Instances', Instance, 0);
+
+        Inifile.DeleteKey('Instances', Instance);
+
+        // Make sue instance is not the current instance
+        if GetCurrentProcessId() <> ProcessID then
+        begin
+          Handle := OpenProcess(PROCESS_TERMINATE, FALSE, ProcessID);
+          if Handle > 0 then
+            TerminateProcess(Handle, 0);
+
+            // MB - I would prefer to send WM_CLOSE or WM_QUIT
+            //      but TWXP ignores these messages
+            // Handle := FindWindow(nil, 'Untitled - Notepad');
+            // if Handle > 0 then
+            //  SendMessage(Handle, WM_CLOSE, 0, 0);
+            //
+            //  Handle := FindWindow(nil, pchar(Instance));
+            //  if Handle > 0 then
+            //    SendMessage(Handle, WM_CLOSE, 0, 0);
+
+        end;
+      end;
+    finally
+      InstanceList.Free;
+      IniFile.Free;
+    end;
+
+    // Terminate the current process last.
+    Handle := OpenProcess(PROCESS_TERMINATE, FALSE, GetCurrentProcessId());
+    if Handle > 0 then
+      SendMessage(Handle, WM_QUIT, 0, 0);
+        TerminateProcess(Handle, 0)
+  end
+  else
+  begin
+
+  end;
+
+  // CMD: CloseInstance <filename> <script>
+  Result := caNone;
+end;
+
+function CmdCopyDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: CopyDatabase <filename> <script>
+  Result := caNone;
+end;
+
+function CmdCreateDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: CreateDatabase <filename> <script>
+  Result := caNone;
+end;
+
+function CmdDeleteDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: DeleteDatabase <filename> <script>
+  Result := caNone;
+end;
+
+function CmdEditDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: EditDatabase <filename> <script>
+  Result := caNone;
+end;
+
+function CmdListDatabases(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: ListDatabases <filename> <script>
+  Result := caNone;
+end;
+
+function CmdLoadDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: LoadDatabase <filename> <script>
+  Result := caNone;
+end;
+
+function CmdCloseDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: CloseDatabase <filename> <script>
+  Result := caNone;
+end;
+
+function CmdResetDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: ResetDatabase <filename> <script>
+  Result := caNone;
+end;
 
 
 // *****************************************************************************
@@ -4247,17 +4364,17 @@ begin
     AddCommand('DIREXISTS', 2, 2, CmdDirExists, [pkValue], pkValue);
     AddCommand('LABELEXISTS', 2, 2, CmdLabelExists, [pkValue], pkValue);
 
-//    AddCommand('OPENINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
-//    AddCommand('CLOSEINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+    AddCommand('OPENINSTANCE', 0, -1, CmdOpenInstance, [pkValue], pkValue);
+    AddCommand('CLOSEINSTANCE', 1, 1, CmdCloseInstance, [pkValue], pkValue);
 
-//    AddCommand('COPYDATABASE', 1, 1, CmdCopyDatabase, [pkValue], pkValue);
-//    AddCommand('CREATEDATABASE', 1, 1, CmdCreateDatabase, [pkValue], pkValue);
-//    AddCommand('DELETEDATABASE', 1, 1, CmdDeleteDatabase, [pkValue], pkValue);
-//    AddCommand('EDITDATABASE', 1, 1, CmdEditDatabase, [pkValue], pkValue);
-//    AddCommand('LISTDATABASES', 1, 1, CmdListDatabases, [pkValue], pkValue);
-//    AddCommand('LOADDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
-//    AddCommand('CLOSEDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
-//    AddCommand('RESETDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+    AddCommand('COPYDATABASE', 1, 1, CmdCopyDatabase, [pkValue], pkValue);
+    AddCommand('CREATEDATABASE', 1, 1, CmdCreateDatabase, [pkValue], pkValue);
+    AddCommand('DELETEDATABASE', 1, 1, CmdDeleteDatabase, [pkValue], pkValue);
+    AddCommand('EDITDATABASE', 1, 1, CmdEditDatabase, [pkValue], pkValue);
+    AddCommand('LISTDATABASES', 1, 1, CmdListDatabases, [pkValue], pkValue);
+    AddCommand('LOADDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+    AddCommand('CLOSEDATABASE', 1, 1, CmdCloseDatabase, [pkValue], pkValue);
+    AddCommand('RESETDATABASE', 1, 1, CmdResetDatabase, [pkValue], pkValue);
 
 
 
