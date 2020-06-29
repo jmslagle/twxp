@@ -2470,6 +2470,8 @@ begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
   INI := TINIFile.Create(TWXGUI.ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
 
+  fileData := TStringList.Create;
+
   try
     SectionList := TStringList.Create;
     BotList := TStringList.Create;
@@ -2494,7 +2496,6 @@ begin
             if (FileExists(TWXGUI.ProgramDir + '\' + FileName)) then
             begin
               try
-                fileData := TStringList.Create;
                 fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
                 BotName := '{' + fileData[0] + '}';
               finally
@@ -2737,7 +2738,6 @@ const
   WM_CLOSE = $0010;
   WM_QUIT = $0012;
 var
-  I,
   ProcessID    : DWORD;
   Instance     : String;
   InstanceList : TStringList;
@@ -2747,9 +2747,9 @@ begin
 
   if Params[0].Value = 'ALL' then
   begin
+    InstanceList := TStringList.Create;
+    IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
     try
-      IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
-      InstanceList := TStringList.Create;
       IniFile.ReadSection('Instances',InstanceList);
       for Instance in InstanceList do
       begin
@@ -2789,28 +2789,154 @@ begin
   end
   else
   begin
+    IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+    try
+      Instance := StripFileExtension(ShortFilename(Params[0].Value));
+      ProcessID := IniFile.ReadInteger('Instances', Instance, 0);
 
+      Inifile.DeleteKey('Instances', Instance);
+
+      Handle := OpenProcess(PROCESS_TERMINATE, FALSE, ProcessID);
+        if Handle > 0 then
+          TerminateProcess(Handle, 0);
+    finally
+      IniFile.Free;
+    end;
   end;
 
   // CMD: CloseInstance <filename> <script>
   Result := caNone;
 end;
 
-function CmdCopyDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+procedure ClearScriptData(Name: string);
+var
+  Result : Integer;
+  searchFile : TSearchRec;
 begin
-  // CMD: CopyDatabase <filename> <script>
+    TWXServer.ClientMessage('Clearing script data files.');
+    try
+      if findfirst(TWXGUI.ProgramDir + '\*_' + Name + '*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(pchar(searchFile.Name));
+      until FindNext(searchFile) <> 0;
+      SysUtils.FindClose(searchFile);
+
+      if findfirst(TWXGUI.ProgramDir + '\data\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(pchar(TWXGUI.ProgramDir + '\data\' + Name + '\' + searchFile.Name));
+      until FindNext(searchFile) <> 0;
+      SysUtils.FindClose(searchFile);
+
+      if findfirst(TWXGUI.ProgramDir + '\scripts\Mombot4p\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(pchar(TWXGUI.ProgramDir + '\scripts\Mombot4p\Games\' + Name + '\' + searchFile.Name));
+      until FindNext(searchFile) <> 0;
+      SysUtils.FindClose(searchFile);
+      RemoveDir(TWXGUI.ProgramDir + '\scripts\Mombot4p\Games\' + Name);
+    finally
+      SysUtils.FindClose(searchFile);
+    end;
+end;
+
+function CmdCopyDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Source, Dest : String;
+begin
+  // CMD: CopyDatabase <source> <dest>
+
+  Source := StripFileExtension(ShortFilename(Params[0].Value));
+  Dest   := StripFileExtension(ShortFilename(Params[1].Value));
+
+  CopyFile(pchar(TWXGUI.ProgramDir + '\data\' + Source + '.xdb'),
+           pchar(TWXGUI.ProgramDir + '\data\' + Dest + '.xdb'), FALSE);
+
   Result := caNone;
 end;
 
 function CmdCreateDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Database : String;
+  Head     : PDataHeader;
 begin
-  // CMD: CreateDatabase <filename> <script>
+  // CMD: CreateDatabase <Name> <Sectors> [Address] [ServerPort] [LisenPort]
+
+  if (Params[0].Value = '') or (Params[1].Value = '') then
+    exit;
+
+  Database := StripFileExtension(ShortFilename(Params[0].Value));
+
+  Head := GetBlankHeader;
+
+  Head^.Sectors := StrToIntDef(Params[1].Value, 0);
+
+  if Length(Params) > 2 then
+    Head^.Address := Params[2].Value;
+
+  if Length(Params) > 3 then
+    Head^.ServerPort := StrToIntDef(Params[3].Value, 2200)
+  else
+    Head^.ServerPort := 2200;
+
+  if Length(Params) > 4 then
+    Head^.ListenPort := StrToIntDef(Params[3].Value, 2300)
+  else
+    Head^.ListenPort := 2300;
+
+  //TWXDatabase.CloseDataBase;
+
+  if FileExists('data\' + Database + '.xdb') = FALSE then
+  begin
+    CreateDir('data\' + Database);
+
+    try
+      TWXDatabase.CreateDatabase('data\' + Database + '.xdb', Head^);
+    except
+    end;
+  end;
+
+  FreeMem(Head);
+
   Result := caNone;
 end;
 
 function CmdDeleteDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Database : String;
+  HFileRes : HFile;
 begin
   // CMD: DeleteDatabase <filename> <script>
+
+  Database := StripFileExtension(ShortFilename(Params[0].Value));
+
+  if UpperCase(TWXDatabase.DatabaseName) = UpperCase(Database) then
+    TWXDatabase.CloseDatabase;
+
+  // MB - check to see if the database is open in another instance
+  HFileRes := CreateFile(PChar(Database),GENERIC_READ or GENERIC_WRITE,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+  if HFileRes = INVALID_HANDLE_VALUE then
+  begin
+    TWXServer.ClientMessage('Error: ' + ANSI_7 + Database + ' is open in another instance.');
+    Exit;
+  End;
+
+  // delete selected database and refresh headers held in memory
+  TWXServer.ClientMessage('Deleting database: ' + ANSI_7 + Database);
+  SetCurrentDir(TWXGUI.ProgramDir);
+  DeleteFile(pchar('data\' + Database + '.xdb'));
+
+  try
+    DeleteFile(pchar('data\' + Database + '.cfg'));
+  except
+    // don't throw an error if couldn't delete .cfg file
+  end;
+
+
+  if Length(Params) > 1 then
+  begin
+    // mb - delete script data
+    ClearScriptData(Database);
+    RemoveDir(TWXGUI.ProgramDir + '\data\' + Database);
+  end;
   Result := caNone;
 end;
 
@@ -2826,9 +2952,15 @@ begin
   Result := caNone;
 end;
 
-function CmdLoadDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+function CmdOpenDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Database : String;
 begin
   // CMD: LoadDatabase <filename> <script>
+  Database := StripFileExtension(ShortFilename(Params[0].Value));
+
+  TWXDatabase.CloseDataBase;
+  TWXDatabase.OpenDatabase('data\' + Database + '.xdb');
   Result := caNone;
 end;
 
@@ -4367,12 +4499,12 @@ begin
     AddCommand('OPENINSTANCE', 0, -1, CmdOpenInstance, [pkValue], pkValue);
     AddCommand('CLOSEINSTANCE', 1, 1, CmdCloseInstance, [pkValue], pkValue);
 
-    AddCommand('COPYDATABASE', 1, 1, CmdCopyDatabase, [pkValue], pkValue);
-    AddCommand('CREATEDATABASE', 1, 1, CmdCreateDatabase, [pkValue], pkValue);
-    AddCommand('DELETEDATABASE', 1, 1, CmdDeleteDatabase, [pkValue], pkValue);
-    AddCommand('EDITDATABASE', 1, 1, CmdEditDatabase, [pkValue], pkValue);
+    AddCommand('COPYDATABASE', 2, 2, CmdCopyDatabase, [pkValue], pkValue);
+    AddCommand('CREATEDATABASE', 2, 5, CmdCreateDatabase, [pkValue], pkValue);
+    AddCommand('DELETEDATABASE', 1, 2, CmdDeleteDatabase, [pkValue], pkValue);
+    AddCommand('EDITDATABASE', 2, 2, CmdEditDatabase, [pkValue], pkValue);
     AddCommand('LISTDATABASES', 1, 1, CmdListDatabases, [pkValue], pkValue);
-    AddCommand('LOADDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+    AddCommand('OPENDATABASE', 1, 1, CmdOpenDatabase, [pkValue], pkValue);
     AddCommand('CLOSEDATABASE', 1, 1, CmdCloseDatabase, [pkValue], pkValue);
     AddCommand('RESETDATABASE', 1, 1, CmdResetDatabase, [pkValue], pkValue);
 
