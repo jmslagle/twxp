@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 For source notes please refer to Notes.txt
 For license terms please refer to GPL.txt.
 
-These files should be stored in the root of the compression you 
+These files should be stored in the root of the compression you
 received this source in.
 }
 unit Global;
@@ -28,6 +28,7 @@ interface
 uses
   GUI,
   Classes,
+  Windows,
   Bubble,
   Menu,
   Database,
@@ -38,6 +39,19 @@ uses
   Persistence;
 
 type
+  TTimerItem = class(TObject)
+  public
+    constructor Create(Name : String);
+
+  protected
+    FName : string;
+    FStartTime : Int64;
+
+  published
+    property Name : string read FName write FName;
+    property StartTime : Int64 read FStartTime write FStartTime;
+  end;
+
   TGlobalVarItem = class(TObject)
   public
     constructor Create(Name, Value : String); overload;
@@ -70,7 +84,16 @@ var
   PersistenceManager: TPersistenceManager;
 
   TWXGlobalVars     : TList;
+  TWXTimers         : TList;
 implementation
+
+constructor TTimerItem.Create(Name : String);
+begin
+  FName  := Name;
+  //QueryPerformanceFrequency(Int64(1000));
+  QueryPerformanceCounter(FStartTime);
+  //FTime  := Time;
+end;
 
 constructor TGlobalVarItem.Create(Name, Value : String);
 begin

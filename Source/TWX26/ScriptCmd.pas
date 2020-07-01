@@ -2354,7 +2354,11 @@ begin
 end;
 
 function CmdClearGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  i : Integer;
 begin
+  for I := 0 to TWXGlobalVars.Count - 1 do
+    TGlobalVarItem(TWXGlobalVars[I]).Destroy;
 
   TWXGlobalVars.Clear;
 
@@ -2808,6 +2812,58 @@ begin
   Result := caNone;
 end;
 
+function GetDatabaseParams(Head : TDataHeader; Params : array of TCmdParam; Start : Integer) : TDataHeader;
+var
+  I : Integer;
+  SplitParams : TStringList;
+begin
+  SplitParams := TStringList.Create;
+
+  try
+  for I := Start to Length(Params) - 1 do
+  begin
+    SplitParams.clear;
+    Split(Params[I].Value, SplitParams, '=');
+
+    if SplitParams[0] = 'ServerAddress' then
+      Head.Address := SplitParams[1]
+    else if SplitParams[0] = 'ServerPort' then
+      Head.ServerPort := StrToIntDef(SplitParams[1], 2002)
+    else if SplitParams[0] = 'ListenPort' then
+      Head.ListenPort := StrToIntDef(SplitParams[1], 2300)
+    else if SplitParams[0] = 'ServerProtocal' then
+      if Uppercase(SplitParams[1]) = 'RLOGIN' then
+        Head.UseRLogin := True
+      else
+        Head.UseRLogin := False
+    else if SplitParams[0] = 'UseLoginScript' then
+      if SplitParams[1] = 'True' then
+        Head.UseLogin := True
+      else
+        Head.UseLogin := False
+    else if SplitParams[0] = 'LoginScript' then
+      Head.LoginScript := SplitParams[1]
+    else if SplitParams[0] = 'LoginName' then
+      Head.LoginName := SplitParams[1]
+    else if SplitParams[0] = 'Password' then
+      Head.Password := SplitParams[1]
+    else if SplitParams[0] = 'GameLetter' then
+      Head.Game := SplitParams[1][1]
+    else if SplitParams[0] = 'IconFile' then
+    begin
+      if (Pos(':', SplitParams[1]) > 0) then
+        Head.IconFile := TWXGUI.Programdir + '\' + SplitParams[1]
+      else
+        Head.IconFile := SplitParams[1];
+    end;
+  end;
+  finally
+    SplitParams.Free;
+  end;
+
+  Result := Head;
+end;
+
 procedure ClearScriptData(Name: string);
 var
   Result : Integer;
@@ -2850,15 +2906,26 @@ begin
   CopyFile(pchar(TWXGUI.ProgramDir + '\data\' + Source + '.xdb'),
            pchar(TWXGUI.ProgramDir + '\data\' + Dest + '.xdb'), FALSE);
 
+  CreateDir('data\' + Dest);
+
+
   Result := caNone;
 end;
 
 function CmdCreateDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
+  I        : Integer;
   Database : String;
   Head     : PDataHeader;
 begin
   // CMD: CreateDatabase <Name> <Sectors> [Address] [ServerPort] [LisenPort]
+
+  I := 2;
+  while I < Length(params) do
+  begin
+    if pos('=', Params[I].Value) > 0 then break;
+    I := I + 1;
+  end;
 
   if (Params[0].Value = '') or (Params[1].Value = '') then
     exit;
@@ -2866,23 +2933,24 @@ begin
   Database := StripFileExtension(ShortFilename(Params[0].Value));
 
   Head := GetBlankHeader;
-
+//DBHeader.ProgramName <> 'TWX DATABASE'
   Head^.Sectors := StrToIntDef(Params[1].Value, 0);
 
-  if Length(Params) > 2 then
+  if I > 2 then
     Head^.Address := Params[2].Value;
 
-  if Length(Params) > 3 then
-    Head^.ServerPort := StrToIntDef(Params[3].Value, 2200)
+  if I > 3 then
+    Head^.ServerPort := StrToIntDef(Params[3].Value, 2002)
   else
-    Head^.ServerPort := 2200;
+    Head^.ServerPort := 2002;
 
-  if Length(Params) > 4 then
-    Head^.ListenPort := StrToIntDef(Params[3].Value, 2300)
+  if I > 4 then
+    Head^.ListenPort := StrToIntDef(Params[4].Value, 2300)
   else
     Head^.ListenPort := 2300;
 
-  //TWXDatabase.CloseDataBase;
+  IF I < Length(params) then
+    Head^ := GetDatabaseParams(Head^, Params, I);
 
   if FileExists('data\' + Database + '.xdb') = FALSE then
   begin
@@ -2901,23 +2969,33 @@ end;
 
 function CmdDeleteDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
-  Database : String;
+  DB, Database : String;
   HFileRes : HFile;
 begin
   // CMD: DeleteDatabase <filename> <script>
 
   Database := StripFileExtension(ShortFilename(Params[0].Value));
+  DB := StripFileExtension(ShortFilename(TWXDatabase.DatabaseName));
 
-  if UpperCase(TWXDatabase.DatabaseName) = UpperCase(Database) then
+  if UpperCase(DB) = UpperCase(Database) then
     TWXDatabase.CloseDatabase;
 
+  if not FileExists('data\' + Database + '.xdb') then
+  begin
+    TWXServer.ClientMessage('Error: ' + ANSI_7 + 'Database ' + Database + ' does not exist.');
+    Exit;
+  End;
+
+
   // MB - check to see if the database is open in another instance
-  HFileRes := CreateFile(PChar(Database),GENERIC_READ or GENERIC_WRITE,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+  HFileRes := CreateFile(PChar('data\' + Database + '.xdb'),GENERIC_READ or GENERIC_WRITE,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
   if HFileRes = INVALID_HANDLE_VALUE then
   begin
     TWXServer.ClientMessage('Error: ' + ANSI_7 + Database + ' is open in another instance.');
     Exit;
   End;
+
+  CloseHandle(HFileRes);
 
   // delete selected database and refresh headers held in memory
   TWXServer.ClientMessage('Deleting database: ' + ANSI_7 + Database);
@@ -2941,10 +3019,37 @@ begin
 end;
 
 function CmdEditDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  DB, Database : String;
+  F            : File;
+  Head         : TDataHeader;
 begin
-  // CMD: EditDatabase <filename> <script>
-  Result := caNone;
+  // CMD: EditDatabase <field> <value>
+
+  Database := StripFileExtension(ShortFilename(Params[0].Value));
+  DB := StripFileExtension(ShortFilename(TWXDatabase.DatabaseName));
+
+    try
+      AssignFile(F, 'data\' + Database + '.xdb');
+      Reset(F, 1);
+      BlockRead(F, Head, SizeOf(TDataHeader));
+    finally
+      CloseFile(F);
+    end;
+
+    Head := GetDatabaseParams(Head, Params, 1);
+
+    try
+      AssignFile(F, 'data\' + Database + '.xdb');
+      Reset(F, 1);
+      BlockWrite(F, Head, SizeOf(TDataHeader));
+    finally
+      CloseFile(F);
+    end;
+
 end;
+
+
 
 function CmdListDatabases(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 begin
@@ -2966,13 +3071,77 @@ end;
 
 function CmdCloseDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 begin
-  // CMD: CloseDatabase <filename> <script>
+  // CMD: CloseDatabase
+
+  TWXDatabase.CloseDatabase;
   Result := caNone;
 end;
 
 function CmdResetDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 begin
   // CMD: ResetDatabase <filename> <script>
+  Result := caNone;
+end;
+
+function CmdStartTimer(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I     : Integer;
+begin
+  // CMD: ResetDatabase <filename> <script>
+
+  // Search for an existing item and remove if found
+  for I := 0 to TWXTimers.Count - 1 do
+  begin
+    if TTimerItem(TWXTimers[I]).Name = TVarParam(Params[0]).Name then
+    begin
+      TTimerItem(TWXTimers[I]).Destroy;
+      TWXTimers.Delete(I);
+      break;
+    end;
+  end;
+
+  TWXTimers.Add(TTimerItem.Create(TVarParam(Params[0]).Name));
+
+  Result := caNone;
+end;
+
+function CmdStopTimer(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+  EndTime, Frequency : Int64;
+begin
+  // CMD: ResetDatabase <filename> <script>
+
+  Params[0].DecValue := 0;
+
+  for I := 0 to TWXTimers.Count - 1 do
+  begin
+    if TTimerItem(TWXTimers[I]).Name = TVarParam(Params[0]).Name then
+    begin
+      //Params[0].Value := FormatDateTime('hh:nn:ss', Time - TTimerItem(TWXTimers[I]).Time);
+      QueryPerformanceFrequency(Frequency);
+      QueryPerformanceCounter(EndTime);
+      Params[0].DecValue :=  ((EndTime - TTimerItem(TWXTimers[I]).StartTime) / Frequency) * 1000;
+      TTimerItem(TWXTimers[I]).Destroy;
+      TWXTimers.Delete(I);
+      break;
+    end;
+  end;
+
+  Result := caNone;
+end;
+
+function CmdClearTimer(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+begin
+  // CMD: ResetDatabase <filename> <script>
+
+  for I := 0 to TWXTimers.Count - 1 do
+    TTimerItem(TWXTimers[I]).Destroy;
+
+  TWXTimers.Clear;
+
   Result := caNone;
 end;
 
@@ -4500,14 +4669,17 @@ begin
     AddCommand('CLOSEINSTANCE', 1, 1, CmdCloseInstance, [pkValue], pkValue);
 
     AddCommand('COPYDATABASE', 2, 2, CmdCopyDatabase, [pkValue], pkValue);
-    AddCommand('CREATEDATABASE', 2, 5, CmdCreateDatabase, [pkValue], pkValue);
+    AddCommand('CREATEDATABASE', 2, -1, CmdCreateDatabase, [pkValue], pkValue);
     AddCommand('DELETEDATABASE', 1, 2, CmdDeleteDatabase, [pkValue], pkValue);
-    AddCommand('EDITDATABASE', 2, 2, CmdEditDatabase, [pkValue], pkValue);
+    AddCommand('EDITDATABASE', 1, -1, CmdEditDatabase, [pkValue], pkValue);
     AddCommand('LISTDATABASES', 1, 1, CmdListDatabases, [pkValue], pkValue);
     AddCommand('OPENDATABASE', 1, 1, CmdOpenDatabase, [pkValue], pkValue);
-    AddCommand('CLOSEDATABASE', 1, 1, CmdCloseDatabase, [pkValue], pkValue);
+    AddCommand('CLOSEDATABASE', 0, 0, CmdCloseDatabase, [pkValue], pkValue);
     AddCommand('RESETDATABASE', 1, 1, CmdResetDatabase, [pkValue], pkValue);
 
+    AddCommand('STARTTIMER', 1, 1, CmdStartTimer, [pkValue], pkValue);
+    AddCommand('STOPTIMER', 1, 1, CmdStopTimer, [pkValue], pkValue);
+    AddCommand('CLEARTIMER', 0, 0, CmdClearTimer, [pkValue], pkValue);
 
 
     //    AddCommand('', 1, 1, Cmd, [pkValue], pkValue);

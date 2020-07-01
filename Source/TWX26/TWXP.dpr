@@ -157,6 +157,7 @@ begin
   ProgramDir := GetCurrentDir;
 
   TWXGlobalVars := TList.Create;
+  TWXTimers := TList.Create;
 
   MessageHandler := TMessageHandler.Create;
   Application.OnMessage := MessageHandler.OnApplicationMessage;
@@ -317,6 +318,11 @@ begin
   for I := 0 to TWXGlobalVars.Count - 1 do
     TGlobalVarItem(TWXGlobalVars[I]).Destroy;
   TWXGlobalVars.Free;
+
+  for I := 0 to TWXTimers.Count - 1 do
+    TTimerItem(TWXTimers[I]).Destroy;
+  TWXTimers.Free;
+
 
   MessageHandler.Free;
 end;

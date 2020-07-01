@@ -427,7 +427,7 @@ begin
   Begin;
     Icon.Handle := SmallIcon;
     trayIcon.Icon := Icon;
-    trayIcon.IconIndex := 0;
+    trayIcon.IconIndex := Index;
     trayIcon.Refresh;
   End;
 end;
