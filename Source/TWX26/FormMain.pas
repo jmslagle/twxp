@@ -112,6 +112,9 @@ type
     miUpdateCheck: TMenuItem;
     miUpdateNow: TMenuItem;
     updateTimer: TTimer;
+    miStopAll: TMenuItem;
+    miStopAllNonSys: TMenuItem;
+    miStopSys: TMenuItem;
 
     procedure miSetupClick(Sender: TObject);
     procedure miConnectClick(Sender: TObject);
@@ -140,6 +143,8 @@ type
     procedure miUpdateNowClick(Sender: TObject);
     procedure miUpdateCheckClick(Sender: TObject);
     procedure updateTimerTick(Sender: TObject);
+    procedure miStopSysClick(Sender: TObject);
+    procedure miStopAllNonSysClick(Sender: TObject);
 const
   private
     LoadingScript : Boolean;
@@ -198,6 +203,7 @@ begin
   FProgramDir := (Owner as TModGUI).ProgramDir;
   LoadingScript := FALSE;
   miStop.Visible := False;
+  miStopAll.Visible := False;
   miQuick.Visible := True;
   miUpdateNow.Visible := False;
 
@@ -1133,6 +1139,8 @@ begin
   miStop.Add(MenuItem);
   miStop.Enabled := TRUE;
   miStop.Visible := TRUE;
+  miStopAll.Enabled := TRUE;
+  miStopAll.Visible := TRUE;
 end;
 
 procedure TfrmMain.RemoveScriptMenu(Script: TScript);
@@ -1148,6 +1156,18 @@ begin
 
   miStop.Enabled := (miStop.Count > 0);
   miStop.Visible := (miStop.Count > 0);
+  miStopAll.Enabled := (miStop.Count > 0);
+  miStopAll.Visible := (miStop.Count > 0);
+end;
+
+procedure TfrmMain.miStopAllNonSysClick(Sender: TObject);
+begin
+  TWXInterpreter.StopAll(False);
+end;
+
+procedure TfrmMain.miStopSysClick(Sender: TObject);
+begin
+  TWXInterpreter.StopAll(True);
 end;
 
 procedure TfrmMain.OnBotMenuItemClick(Sender: TObject);
