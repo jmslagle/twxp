@@ -504,6 +504,14 @@ begin
   FreeMem(SectorWarpCache);
   CloseCache;
   FDataFilename := '';
+
+  // MB - remove the tray description and ser default icon
+  TWXServer.Broadcast(endl + ANSI_15 + 'Database successfully Closed.');
+  TWXGUI.DatabaseName := '';
+  TWXGUI.TrayHint := ' (' + IntToStr(TWXDatabase.ListenPort) + ')';
+  TWXGUI.LoadTrayIcon('');
+
+
 end;
 
 procedure TModDatabase.CreateDatabase(Filename : string; Head : TDataHeader);

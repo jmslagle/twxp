@@ -113,6 +113,7 @@ type
     FLastScript,
     FActiveBot,
     FActiveBotScript,
+    FActiveBotNameVar,
     FProgramDir: string;
 
     function GetScript(Index : Integer) : TScript;
@@ -121,7 +122,7 @@ type
     function GetAutoRunText: string;
     procedure SetAutoRunText(Value: string);
     procedure OntmrTimeTimer(Sender: TObject);
-
+    function GetActiveBotName : String;
   protected
     { ITWXGlobals }
     function GetProgramDir: string;
@@ -153,6 +154,7 @@ type
     property LastScript : string read FLastScript;
     property ActiveBot : string read FActiveBot;
     property ActiveBotScript   : string read FActiveBotScript;
+    property ActiveBotName   : string read GetActiveBotName;
     property ScriptMenu : TMenuItem read FScriptMenu write FScriptMenu;
     property ScriptRef : TScriptRef read FScriptRef;
     property ProgramDir: string read GetProgramDir;
@@ -219,6 +221,7 @@ type
     procedure DumpTriggers;
     procedure AddMenu(MenuItem : TObject);
     procedure GotoLabel(L : string);
+    function LabelExists(L : string): Boolean;
     function TextLineEvent(const Text : string; ForceTrigger : Boolean) : Boolean;
     function AutoTextEvent(const Text : string; ForceTrigger : Boolean) : Boolean;
     function TextEvent(const Text : string; ForceTrigger : Boolean) : Boolean;
@@ -382,7 +385,8 @@ begin
   // MB - Allow reconnect after manual disconnect when launching a script
   TWXClient.UserDisconnect := FALSE;
 
-  if (Copy(UpperCase(Filename), Length(Filename) - 3, 4) = '.CTS') then
+  if (Copy(UpperCase(Filename), Length(Filename) - 3, 4) = '.CTS') or
+     (Copy(UpperCase(Filename), Length(Filename) - 3, 4) = '.TWX') then
   begin
     if not (Silent) then
       TWXServer.ClientMessage('Loading script: ' + ANSI_7 + Filename);
@@ -521,7 +525,11 @@ begin
        else
          Load('scripts\' + script, FALSE);
      end;
-      FActiveBotScript := ScriptName;
+     
+     FActiveBotScript := StringReplace(ScriptName, FProgramDir + '\scripts\', '', [rfReplaceAll]);
+     FActiveBot := '';
+     FActiveBotNameVar := '';
+
 
       // MB - Get the activescript name from the ini file.
       begin
@@ -532,9 +540,10 @@ begin
           for Section in SectionList do
           begin
             BotScript  := IniFile.ReadString(Section, 'Script', '');
-            if (Pos(LowerCase(ScriptName), LowerCase(BotScript)) = 1) then
+            if (Pos(LowerCase(FActiveBotScript), LowerCase(BotScript)) = 1) then
             begin
               FActiveBot := IniFile.ReadString(Section, 'Name', '');
+              FActiveBotNameVar := IniFile.ReadString(Section, 'NameVar', '');
             end;
           end;
         finally
@@ -549,6 +558,20 @@ begin
       ScriptList.free();
     end;
   end;
+end;
+
+function TModInterpreter.GetActiveBotName() : String;
+var
+  INI : TINIFile;
+begin
+  INI := TINIFile.Create(FProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
+
+  if Length(FActiveBotNameVar) > 0 then
+    result := INI.ReadString('Variables', FActiveBotNameVar, '0')
+  else
+    result := '';
+
+  INI.Free;
 end;
 
 procedure TModInterpreter.ProgramEvent(EventName, MatchText : string; Exclusive : Boolean);
@@ -1721,6 +1744,30 @@ begin
 
   raise EScriptError.Create('Goto label not found ''' + L + '''');
 end;
+
+function TScript.LabelExists(L : string) : Boolean;
+var
+  Error : Boolean;
+  I     : Integer;
+begin
+  // seek label with name L
+  L := UpperCase(Copy(L, 2, Length(L)));
+  Cmp.ExtendName(L, ExecScriptID);
+
+  if (Cmp.LabelCount > 0) then
+    for I := 0 to Cmp.LabelCount - 1 do
+    begin
+      if (Cmp.Labels[I].Name = L) then
+      begin
+        Result := TRUE;
+        Exit;
+      end;
+    end;
+
+  Result := FALSE;
+end;
+
+
 
 procedure TScript.Gosub(LabelName : String);
 begin

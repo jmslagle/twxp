@@ -577,9 +577,22 @@ end;
 
 procedure TScriptCmp.BuildLabel(const Name : string; Location : Integer);
 var
+  I        : Integer;
+  CurLabel,
   NewLabel : TScriptLabel;
 begin
   // create a new label - label's constructor will add it to label list automatically
+
+  // mb - throw exception on duplicate label
+  for i := 0 to FLabelList.Count - 1 do
+  begin
+    CurLabel := FLabelList[i];
+    if (pos(':', Name) = 0) and (CurLabel.Name = Name) then
+      raise EScriptError.Create('Duplicate label found (:' + Name + ')');
+
+  end;
+
+
 
   NewLabel := TScriptLabel.Create;
   NewLabel.Name := Name;
@@ -1061,7 +1074,7 @@ type
        + OP_XOR
        + OP_NOTEQUAL, V1, V2, Op)) then
        if not (SplitOperator(Equation, '+-', V1, V2, Op)) then
-         if not (SplitOperator(Equation, '*/', V1, V2, Op)) then
+         if not (SplitOperator(Equation, '*/%', V1, V2, Op)) then
            Split := FALSE;
 
       if (Split) then
@@ -1131,6 +1144,12 @@ type
         // division (/): divide Value1 by Value2
         RecurseCmd(['SETVAR', Result, Value1], Line, ScriptID);
         RecurseCmd(['DIVIDE', Result, Value2], Line, ScriptID);
+      end
+      else if (Branch^.Op = '%') then
+      begin
+        // division (%): modulas Value1 by Value2
+        RecurseCmd(['SETVAR', Result, Value1], Line, ScriptID);
+        RecurseCmd(['MODULAS', Result, Value2], Line, ScriptID);
       end
       else if (Branch^.Op = '&') then
         // concatenation (&): concatenate both values
@@ -1570,6 +1589,7 @@ begin
      (C = '-') or
      (C = '*') or
      (C = '/') or
+     (C = '%') or
      (C = '&') or
      (C = OP_GREATEREQUAL) or
      (C = OP_LESSEREQUAL) or
@@ -1630,7 +1650,7 @@ begin
             // mb - handle asignment operators
             if not (InQuote) and (LineText[I] = '=') then
             begin
-              if pos(last,':*/+-') > 0 then
+              if pos(last,':*/%+-') > 0 then
               begin
                 ParamLine.Clear;
 
@@ -1640,6 +1660,8 @@ begin
                   ParamLine.Append('MULTIPLY');
                 if Last = '/' then
                   ParamLine.Append('DIVIDE');
+                if Last = '%' then
+                  ParamLine.Append('MODULAS');
                 if Last = '+' then
                   ParamLine.Append('ADD');
                 if Last = '-' then

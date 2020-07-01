@@ -44,7 +44,7 @@ const
   OP_DONT = #254;
 
 type
-  TClientType = (ctStandard, ctDeaf, ctRejected, ctMute);
+  TClientType = (ctStandard, ctDeaf, ctRejected, ctMute, ctStream);
   TDisplayMode = (ctSilent, ctQuiet, ctNormal, ctVerbose);
 
   TTelnetSocket = class(TTWXModule)
@@ -79,7 +79,9 @@ type
     FCurrentClient   : Integer;
     FBufferOut       : TStringList;
     FBufTimer        : TTimer;
+    FStreamEnabled,
     FAllowLerkers    : Boolean;
+    FLerkerAddress   : String;
     FAcceptExternal  : Boolean;
     FExternalAddress : String;
     FBroadCastMsgs   : Boolean;
@@ -100,8 +102,12 @@ type
     procedure SetListenPort(Value: Word);
 
     { IModServer }
+    function GetStreamEnabled: Boolean;
+    procedure SetStreamEnabled(Value: Boolean);
     function GetAllowLerkers: Boolean;
     procedure SetAllowLerkers(Value: Boolean);
+    function GetLerkerAddress: String;
+    procedure SetLerkerAddress(Value: String);
     function GetAcceptExternal: Boolean;
     procedure SetAcceptExternal(Value: Boolean);
     function GetExternalAddress: String;
@@ -144,7 +150,9 @@ type
 
   published
     property ListenPort: Word read GetListenPort write SetListenPort;
+    property StreamEnabled: Boolean read GetStreamEnabled write SetStreamEnabled;
     property AllowLerkers: Boolean read GetAllowLerkers write SetAllowLerkers;
+    property LerkerAddress: String read GetLerkerAddress write SetLerkerAddress;
     property AcceptExternal: Boolean read GetAcceptExternal write SetAcceptExternal;
     property ExternalAddress: String read GetExternalAddress write SetExternalAddress;
     property BroadCastMsgs: Boolean read GetBroadCastMsgs write SetBroadCastMsgs;
@@ -223,6 +231,8 @@ procedure TModServer.AfterConstruction;
 begin
   inherited;
 
+  Randomize();
+
   tcpServer := TServerSocket.Create(Self);
 
   with (tcpServer) do
@@ -263,7 +273,7 @@ begin
   AddSystemQuickText('~F', '^[1;35m');
   AddSystemQuickText('~G', '^[1;36m');
   AddSystemQuickText('~H', '^[1;37m');
-  AddSystemQuickText('~i', '^[1;30m');
+  AddSystemQuickText('~i', '^[40m');
   AddSystemQuickText('~j', '^[41m');
   AddSystemQuickText('~k', '^[42m');
   AddSystemQuickText('~l', '^[43m');
@@ -271,25 +281,28 @@ begin
   AddSystemQuickText('~n', '^[45m');
   AddSystemQuickText('~o', '^[46m');
   AddSystemQuickText('~p', '^[47m');
+  AddSystemQuickText('~I', '^[5;40m');
+  AddSystemQuickText('~J', '^[5;41m');
+  AddSystemQuickText('~K', '^[5;42m');
+  AddSystemQuickText('~L', '^[5;43m');
+  AddSystemQuickText('~M', '^[5;44m');
+  AddSystemQuickText('~N', '^[5;45m');
+  AddSystemQuickText('~O', '^[5;46m');
+  AddSystemQuickText('~P', '^[5;47m');
   AddSystemQuickText('~!', '^[2J^[H');
   AddSystemQuickText('~@', chr(13) + '^[0m^[0K');
   AddSystemQuickText('~0', '^[0m');
   AddSystemQuickText('~1', '^[0m^[1;36m');
   AddSystemQuickText('~2', '^[0m^[1;33m');
   AddSystemQuickText('~3', '^[0m^[35m');
-  AddSystemQuickText('~4', '^[0m^[44m');
+  AddSystemQuickText('~4', '^[0m^[1;44m');
   AddSystemQuickText('~5', '^[0m^[32m');
-  AddSystemQuickText('~6', '^[0m^[1;5;31m');
+  AddSystemQuickText('~6', '^[0m^[1;5;37m');
   AddSystemQuickText('~7', '^[0m^[1;37m');
   AddSystemQuickText('~8', '^[0m^[1;5;31m');
   AddSystemQuickText('~9', '^[0m^[30;47m');
-  AddSystemQuickText('~q', '^[0m^[5;34m');
-  AddSystemQuickText('~r', '^[0m^[34m');
-  AddSystemQuickText('~s', '^[0m^[30;41m');
-  AddSystemQuickText('~I', '^[0;34;47m');
-  AddSystemQuickText('~J', '^[31;47m');
-  AddSystemQuickText('~K', '^[1;33;44m');
-
+  AddSystemQuickText('~s', '[s');
+  AddSystemQuickText('~u', '[u');
 end;
 
 procedure TModServer.BeforeDestruction;
@@ -317,21 +330,29 @@ end;
 
 function TModServer.ApplyQuickText(Text : string) : string;
 var
-  QuickText : TQuickText;
   I : Integer;
 begin
+    // Store literal Tildes as null
+    Text := stringreplace(Text, '~~', chr(255), [rfReplaceAll]);
+
+    // Apply user QuickText strings
     for I := 0 to UserQuickText.Count - 1 do
     begin
       Text := stringreplace(Text, TQuickText(UserQuickText[I]).Search,
               TQuickText(UserQuickText[I]).Replace, [rfReplaceAll]);
     end;
 
+    // Apply system QuickText strings
     for I := 0 to SystemQuickText.Count - 1 do
     begin
       Text := stringreplace(Text, TQuickText(SystemQuickText[I]).Search,
               TQuickText(SystemQuickText[I]).Replace, [rfReplaceAll]);
     end;
 
+    // convert Null characters to literal ~ in final string
+    Text := stringreplace(Text, chr(255), '~', [rfReplaceAll]);
+
+    // replace "^[" with literal "<esc>[" in result
     result := stringreplace(Text, '^[', chr(27) + '[', [rfReplaceAll]);
 end;
 
@@ -351,6 +372,9 @@ procedure TModServer.AddQuickText(Search, Replace : string);
 var
   NewText : TQuickText;
 begin
+  // Make sure there is no existing User QuickText
+  ClearQuickText(Search);
+
   // build new User QuickText
   NewText := TQuickText.Create;
   NewText.Search  := Search;
@@ -361,7 +385,6 @@ end;
 
 procedure TModServer.ClearQuickText(Search : string = '');
 var
-  NewText : TQuickText;
   I : Integer;
 begin
   if (Search = '') then
@@ -389,11 +412,32 @@ end;
 procedure TModServer.Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE);
 var
   I : Integer;
+  Stream : String;
+  InAnsi : Boolean;
 begin
   if (Length(Text) = 0) then
     Exit;
 
   Text := ApplyQuickText(Text);
+
+  Stream := Text;
+  for I := 0 to length(Stream) - 1 do
+  begin
+    if (Stream[I] = #27) then
+      InAnsi := TRUE;
+
+    if (InAnsi = FALSE) then
+      if (Stream[I] >= '0') and (Stream[I] <= '9') then
+        Stream[I] := chr(255);
+
+    if ((Stream[I] >= chr(65)) and (Stream[I] <= chr(90))) or ((Stream[I] >= chr(97)) and (Stream[I] <= chr(122))) then
+      InAnsi := FALSE;
+  end;
+
+  for I := 0 to 2 do
+    Stream := stringreplace(Stream,  chr(255) +  chr(255), chr(255), [rfReplaceAll]);
+
+  Stream := stringreplace(Stream,  chr(255), '1', [rfReplaceAll]);
 
   if not (Buffered) and (FBufferOut.Count > 0) then
   begin
@@ -409,7 +453,10 @@ begin
       if (AMarkEcho) and (FClientEchoMarks[I]) then
         tcpServer.Socket.Connections[I].SendText(#255 + #0 + Text + #255 + #1)
       else
-        tcpServer.Socket.Connections[I].SendText(Text);
+        if ClientTypes[I] = ctStream then
+          tcpServer.Socket.Connections[I].SendText(Stream)
+        else
+          tcpServer.Socket.Connections[I].SendText(Text);
       except
         OutputDebugString(PChar('Unexpected error sending broadcast message'));
       end;
@@ -489,7 +536,8 @@ const
   T_DONT = #255 + #254;
 var
   IniFile       : TIniFile;
-  LocalClient   : Boolean;
+  LocalClient,
+  Lerker        : Boolean;
   Index         : Integer;
   RemoteAddress,
   Address,
@@ -515,39 +563,53 @@ begin
 
      for Address in AddressList do
      begin
-        TempAddress := stringreplace(Address, '.*', '',[rfReplaceAll, rfIgnoreCase]);
-        if (Copy(RemoteAddress,1,length(TempAddress)) = TempAddress)
-        then
-          LocalClient := TRUE
+       if length(ExternalAddress) > 0 then
+       begin
+          TempAddress := stringreplace(Address, '.*', '',[rfReplaceAll, rfIgnoreCase]);
+          if (Copy(RemoteAddress,1,length(TempAddress)) = TempAddress)
+          then
+            LocalClient := TRUE
+       end;
+     end;
+
+     Lerker := FALSE;
+     AddressList.Clear();
+     ExtractStrings([' '],[], pchar(LerkerAddress), AddressList);
+
+     for Address in AddressList do
+     begin
+        // Allow globsl wildcard
+        if (Address = '*')  or (Address = '*.*.*.*') then
+          Lerker := TRUE
+        else
+          if length(LerkerAddress) > 0 then
+          begin
+            TempAddress := stringreplace(Address, '.*', '',[rfReplaceAll, rfIgnoreCase]);
+            if (Copy(RemoteAddress,1,length(TempAddress)) = TempAddress) then
+              Lerker := TRUE;
+          end;
      end;
    finally
      AddressList.Free;
    end;
 
-  if (not AcceptExternal) and (not AllowLerkers) and (RemoteAddress <> '127.0.0.1') then
-    begin
-      // User not allowed
-      Socket.SendText(ANSI_12 + 'External connections are disabled. Goodbye!');
-      Sleep(500);
-      FClientTypes[Index] := ctRejected;
-      Socket.Close();
-      if (BroadCastMsgs) then
-        Broadcast(endl + ANSI_12 + 'Remote connection rejected from: ' + ANSI_14 + RemoteAddress + endl);
-      exit;
-    end
-  else if ((AcceptExternal) or (AllowLerkers)) and (not LocalClient) then
-    begin
-      Socket.SendText(ANSI_12 + 'Lerkers are not welcome here. Goodbye!');
-      Sleep(500);
-      FClientTypes[Index] := ctRejected;
-      Socket.Close();
-      if (BroadCastMsgs) then
-        Broadcast(endl + ANSI_12 + 'Remote connection rejected from: ' + ANSI_14 + RemoteAddress + endl);
-      exit;
-    end;
+   if (RemoteAddress = '127.0.0.1') or
+      (AcceptExternal and LocalClient) or
+      (AllowLerkers and Lerker) then
+      Socket.SendText(endl + ANSI_13 + 'TWX Proxy Server ' + ANSI_11 + 'v' +
+        ProgramVersion + chr(ReleaseNumber + 96) + ANSI_7 + ' (' + ReleaseVersion + ')' + endl)
+   else
+   begin
+     // User not allowed
+     Socket.SendText(ANSI_12 + 'External connections are disabled. Goodbye ' + RemoteAddress + '!');
+     Sleep(500);
+     FClientTypes[Index] := ctRejected;
+     Socket.Close();
+     if (BroadCastMsgs) then
+       Broadcast(endl + ANSI_12 + 'Remote connection rejected from: ' + ANSI_14 + RemoteAddress + endl);
+     exit;
+   end;
 
-  Socket.SendText(endl + ANSI_13 + 'TWX Proxy Server ' + ANSI_11 + 'v' +
-                  ProgramVersion + chr(ReleaseNumber + 96) + ANSI_7 + ' (' + ReleaseVersion + ')' + endl);
 
   if (BroadCastMsgs) then
     Broadcast(endl + ANSI_2 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl + endl)
@@ -610,8 +672,12 @@ begin
     end
     else
     begin
-      FClientTypes[Index] := ctMute;
-      Socket.SendText(ANSI_12 + 'You are locked in view only mode' + ANSI_7 + endl + endl);
+      if StreamEnabled then
+        FClientTypes[Index] := ctStream
+      else
+        FClientTypes[Index] := ctMute;
+
+        Socket.SendText(ANSI_12 + 'You are locked in view only mode' + ANSI_7 + endl + endl);
     end;
 
     TWXInterpreter.ProgramEvent('Client connected', '', FALSE);
@@ -692,8 +758,9 @@ begin
 
   FCurrentClient := GetSocketIndex(Socket);
 
-  if (ClientTypes[FCurrentClient] = ctMute) then
-    Exit; // mute clients can't talk
+  if (ClientTypes[FCurrentClient] = ctMute) or
+     (ClientTypes[FCurrentClient] = ctStream) then
+    Exit; // mute / streaming clients can't talk
 
   // Process data for telnet commands
   if (TWXExtractor.ProcessOutBound(InString, FCurrentClient)) and (TWXClient.Connected) then
@@ -796,6 +863,16 @@ begin
   tcpServer.Active := FALSE;
 end;
 
+function TModServer.GetStreamEnabled: Boolean;
+begin
+  Result := FStreamEnabled;
+end;
+
+procedure TModServer.SetStreamEnabled(Value: Boolean);
+begin
+  FStreamEnabled := Value;
+end;
+
 function TModServer.GetAllowLerkers: Boolean;
 begin
   Result := FAllowLerkers;
@@ -804,6 +881,16 @@ end;
 procedure TModServer.SetAllowLerkers(Value: Boolean);
 begin
   FAllowLerkers := Value;
+end;
+
+function TModServer.GetLerkerAddress: String;
+begin
+  Result := FLerkerAddress;
+end;
+
+procedure TModServer.SetLerkerAddress(Value: String);
+begin
+  FLerkerAddress := Value;
 end;
 
 function TModServer.GetAcceptExternal: Boolean;

@@ -157,6 +157,7 @@ begin
   ProgramDir := GetCurrentDir;
 
   TWXGlobalVars := TList.Create;
+  TWXTimers := TList.Create;
 
   MessageHandler := TMessageHandler.Create;
   Application.OnMessage := MessageHandler.OnApplicationMessage;
@@ -183,7 +184,7 @@ begin
 
   PersistenceManager.LoadStateValues;
   TWXGUI.DatabaseName := '';
-
+  TWXGUI.StartupScripts := TStringList.Create;
   // check command line values
   I := 1;
   while (I <= ParamCount) do
@@ -196,7 +197,11 @@ begin
     //      for windows file association.
     if (Copy(Switch, 1, 1) <> '/') and (Length(Switch) > 0) then
     begin
-      TWXGUI.DatabaseName := StripFileExtension(ShortFilename(Switch));
+      if ExtractFileExt(Switch) = '.XDB' then
+        TWXGUI.DatabaseName := StripFileExtension(ShortFilename(Switch))
+      else
+        TWXGUI.StartupScripts.Add(Switch);
+
     end
     else if (Copy(Switch, 1, 2) = '/P') and (Length(Switch) > 2) then
     begin
@@ -258,13 +263,20 @@ procedure FinaliseProgram;
 var
   ObjectName : String;
   I          : Integer;
+  IniFile     : TIniFile;
 begin
   try
-    // MB - Save the current database name.
+    // MB - Save the current database name amd Clost the database.
     TWXGUI.DatabaseName := StripFileExtension(ShortFilename(TWXDatabase.DatabaseName));
-
-    // MB - Close database before saving module states to prevent unhandled exception
     TWXDatabase.CloseDatabase;
+
+    IniFile := TIniFile.Create(ProgramDir + '\twxp.cfg');
+    try
+      Inifile.DeleteKey('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)));
+    finally
+      Inifile.Free;
+    end;
+
 
     PersistenceManager.SaveStateValues;
   except
@@ -307,6 +319,11 @@ begin
     TGlobalVarItem(TWXGlobalVars[I]).Destroy;
   TWXGlobalVars.Free;
 
+  for I := 0 to TWXTimers.Count - 1 do
+    TTimerItem(TWXTimers[I]).Destroy;
+  TWXTimers.Free;
+
+
   MessageHandler.Free;
 end;
 
@@ -335,10 +352,6 @@ end;
 procedure CreateConfig();
 var
    IniFile     : TIniFile;
-   BotName,
-   Script,
-   Section     : String;
-   SectionList : TStringList;
 begin
   ProgramDir := GetCurrentDir;
 
@@ -347,18 +360,18 @@ begin
     IniFile := TIniFile.Create(ProgramDir + '\twxp.cfg');
 
     try
-      IniFile.WriteString('TWX Proxy', 'Upgrade', '2814.2814.1939.1939.1939');
+      IniFile.WriteString('TWX Proxy', 'Upgrade', '2020.06.11');
+      IniFile.WriteString('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)), IntToStr(GetCurrentProcessId()));
 
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
       IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
+      IniFile.WriteString('Bot:Mom', 'NameVar', '$BOT~BOT_NAME');
       IniFile.WriteString('Bot:1045', 'Name', 'Legacy Mombot 3.1045');
       IniFile.WriteString('Bot:1045', 'Script', 'Mombot3\__mom_bot3_1045.cts');
-      IniFile.WriteString('Bot:1044', 'Name', 'Legacy Mombot 3.1044');
-      IniFile.WriteString('Bot:1044', 'Script', 'Mombot3\__mom_bot3_1044.ts');
-      IniFile.WriteString('Bot:Qu', 'Name', 'Quantum Qubot');
-      IniFile.WriteString('Bot:Qu', 'Script', 'Quantum\Qubot.cts');
+      IniFile.WriteString('Bot:1045', 'NameVar', 'FILE:_MOM_{GAME}.bot');
       IniFile.WriteString('Bot:Zed', 'Name', 'Zed Bot Unleashed');
       IniFile.WriteString('Bot:Zed', 'Script', 'z-authorise.cts,z-bot.cts');
+      IniFile.WriteString('Bot:Zed', 'NameVar', '$Z_BOTNAME');
 
       IniFile.WriteString('QuickLoad', '1_', 'Xide Pack1');
       IniFile.WriteString('QuickLoad', '2_', 'Xide Pack2');
@@ -386,10 +399,14 @@ begin
     IniFile := TIniFile.Create(ProgramDir + '\twxp.cfg');
 
     try
-      IniFile.WriteString('TWX Proxy', 'Upgrade', '2814.2814.1939.1939.1939');
+      IniFile.WriteString('TWX Proxy', 'Upgrade', '2020.06.11');
+      IniFile.WriteString('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)), IntToStr(GetCurrentProcessId()));
 
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
       IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
+      IniFile.WriteString('Bot:Mom', 'NameVar', '$BOT~BOT_NAME');
+      IniFile.WriteString('Bot:1045', 'NameVar', 'FILE:_MOM_{GAME}.bot');
+      IniFile.WriteString('Bot:Zed', 'NameVar', '$Z_BOTNAME');
     finally
       IniFile.Free;
     end;
@@ -398,8 +415,10 @@ begin
 end;
 
 var
+  I          : Integer;
   S          : TSearchRec;
   fileDate   : Integer;
+  FileName,
   dbFile     : string;
   HFileRes   : HFILE;
 begin
@@ -411,7 +430,6 @@ begin
   Application.Title := 'TWX Proxy';
   //Application.CreateForm(TfrmChangeIcon, FormChangeIcon);
   SetCurrentDir(ExtractFilePath(Application.ExeName));
-  CreateConfig();
   InitProgram;
 
   if TWXGUI.DatabaseName <> '' then
@@ -446,6 +464,21 @@ begin
 
   if TWXDatabase.DataBaseOpen then
     TWXServer.Activate;
+
+  for I := 0 to TWXGUI.StartupScripts.Count - 1 do
+  begin
+    Filename := ProgramDir + '\dcripts\' + TWXGUI.StartupScripts[i];
+
+    if (Pos('bot', LowerCase(ExtractFileName(Filename))) > 0) and
+       (Pos('switchbot', LowerCase(ExtractFileName(Filename))) = 0)
+    then
+      TWXInterpreter.SwitchBot(Filename, True)
+    else
+      TWXInterpreter.Load(Filename, False)
+  end;
+
+  TWXGUI.StartupScripts.Free;
+  CreateConfig();
 
   try
     // we don't use the TApplication message loop, as it requires a main form

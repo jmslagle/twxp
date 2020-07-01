@@ -70,6 +70,17 @@ object frmMain: TfrmMain
     object miStop: TMenuItem
       Caption = '&Stop Script'
     end
+    object miStopAll: TMenuItem
+      Caption = 'Stop &All Scripts'
+      object miStopSys: TMenuItem
+        Caption = '&All (Including System)'
+        OnClick = miStopSysClick
+      end
+      object miStopAllNonSys: TMenuItem
+        Caption = '&Non-System Scripts'
+        OnClick = miStopAllNonSysClick
+      end
+    end
     object miQuick: TMenuItem
       Caption = '&Quick Load'
     end

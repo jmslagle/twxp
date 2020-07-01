@@ -114,6 +114,9 @@ type
     Label2: TLabel;
     TrayImage: TImage;
     btnReset: TButton;
+    Label24: TLabel;
+    tbLerkerAddress: TEdit;
+    cbStreamingMode: TCheckBox;
     procedure FormHide(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure btnOKMainClick(Sender: TObject);
@@ -123,8 +126,10 @@ type
     procedure btnSaveClick(Sender: TObject);
     procedure btnDeleteClick(Sender: TObject);
     procedure cbUseLoginClick(Sender: TObject);
+    procedure btnEditClick(Sender: TObject);
     procedure btnResetClick(Sender: TObject);
     procedure btnCancelClick(Sender: TObject);
+    procedure ClearScriptData(Name: String);
 
     procedure btnAddAutoRunClick(Sender: TObject);
     procedure btnRemoveAutoRunClick(Sender: TObject);
@@ -137,6 +142,7 @@ type
     procedure cbAcceptExternalClick(Sender: TObject);
     procedure LoadIconImage(IconFile: String);
     procedure TrayImageClick(Sender: TObject);
+    procedure cbAcceptLerkerClick(Sender: TObject);
 
 
   private
@@ -196,7 +202,9 @@ begin
   cbCache.Checked := TWXDatabase.UseCache;
   // MB - Moved to database.
   //tbListenPort.Text := IntToStr(TWXServer.ListenPort);
+  cbStreamingMode.Checked := TWXServer.StreamEnabled;
   cbAllowLerkers.Checked := TWXServer.AllowLerkers;
+  tbLerkerAddress.Text := TWXServer.LerkerAddress;
   cbAcceptExternal.Checked := TWXServer.AcceptExternal;
   tbExternalAddress.Text := TWXServer.ExternalAddress;
   cbReconnect.Checked := TWXClient.Reconnect;
@@ -383,9 +391,21 @@ begin
   // MB - Moved to Database.
   //TWXServer.ListenPort := StrToIntDef(tbListenPort.Text, 3000);
   //TWXServer.Activate;
-  TWXServer.AllowLerkers := cbAllowLerkers.Checked;
-  TWXServer.AcceptExternal := cbAcceptExternal.Checked;
-  TWXServer.ExternalAddress := tbExternalAddress.Text;
+  TWXServer.StreamEnabled := cbStreamingMode.Checked;
+  if (TWXServer.AllowLerkers <> cbAllowLerkers.Checked) or
+     (TWXServer.LerkerAddress <> tbLerkerAddress.Text) or
+     (TWXServer.AcceptExternal <> cbAcceptExternal.Checked) or
+     (TWXServer.ExternalAddress <> tbExternalAddress.Text) then
+  begin
+    TWXServer.AllowLerkers := cbAllowLerkers.Checked;
+    TWXServer.LerkerAddress := tbLerkerAddress.Text;
+    TWXServer.AcceptExternal := cbAcceptExternal.Checked;
+    TWXServer.ExternalAddress := tbExternalAddress.Text;
+
+    TWXServer.Broadcast(ANSI_15 + 'Closing all client connections... Goodbye!' + endl);
+    TWXServer.Deactivate();
+    TWXServer.Activate()
+  end;
   TWXServer.BroadCastMsgs := cbBroadCast.Checked;
   TWXServer.LocalEcho := cbLocalEcho.Checked;
   TWXClient.Reconnect := cbReconnect.Checked;
@@ -399,13 +419,12 @@ begin
     DB := TWXDatabase.DatabaseName;
     TWXDatabase.CloseDatabase;
     PersistenceManager.SaveStateValues;
-
-    if (cbGames.ItemIndex >= 0) then
-      TWXDatabase.DatabaseName := TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).Filename;
-
   except
     TWXServer.ClientMessage('Errror - Unable to save program state.');
   end;
+
+  if (cbGames.ItemIndex >= 0) then
+  TWXDatabase.DatabaseName := TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).Filename;
 
   Close;
 end;
@@ -426,7 +445,7 @@ begin
   if cbAcceptExternal.Checked then
   begin
     tbExternalAddress.Enabled := TRUE;
-    tbExternalAddress.Text := '';
+    tbExternalAddress.Text := TWXServer.ExternalAddress;
   end
   else
   begin
@@ -434,7 +453,21 @@ begin
     tbExternalAddress.Text := '';
     tbExternalAddress.Focused;
   end;
+end;
 
+procedure TfrmSetup.cbAcceptLerkerClick(Sender: TObject);
+begin
+  if cbAllowLerkers.Checked then
+  begin
+    tbLerkerAddress.Enabled := TRUE;
+    tbLerkerAddress.Text := TWXServer.LerkerAddress;
+  end
+  else
+  begin
+    tbLerkerAddress.Enabled := FALSE;
+    tbLerkerAddress.Text := '';
+    tbLerkerAddress.Focused;
+  end;
 end;
 
 procedure TfrmSetup.cbGamesChange(Sender: TObject);
@@ -577,6 +610,7 @@ begin
   btnAdd.Enabled := TRUE;
   btnDelete.Enabled := TRUE;
   btnEdit.Enabled := TRUE;
+  btnReset.Enabled := TRUE;
 
   cbGames.Enabled := TRUE;
   btnOKMain.Enabled := TRUE;
@@ -622,6 +656,8 @@ begin
 
     if (DoCreate) then
     begin
+      CreateDir('data\' + tbDescription.Text);
+
       try
         TWXDatabase.CreateDatabase(S, Head^);
       except
@@ -719,6 +755,7 @@ begin
 
   btnAdd.Enabled := FALSE;
   btnEdit.Enabled := FALSE;
+  btnReset.Enabled := FALSE;
   btnDelete.Enabled := FALSE;
 
   cbGames.Enabled  := FALSE;
@@ -731,39 +768,41 @@ begin
   Edit := FALSE;
 end;
 
-//procedure TfrmSetup.btnResetClickOld(Sender: TObject);
-//begin
-//  tbHost.Enabled := TRUE;
-//  tbPort.Enabled := TRUE;
-//  tbListenPort.Enabled := TRUE;
-//  cbUseLogin.Enabled := TRUE;
-//  cbUseRLogin.Enabled := TRUE;
-//  cbUseLoginClick(Sender);
-//  tbLoginName.Enabled := TRUE;
-//  tbPassword.Enabled := TRUE;
-//  tbGame.Enabled := TRUE;
-//  TrayImage.Enabled := TRUE;
+procedure TfrmSetup.btnEditClick(Sender: TObject);
+begin
+  tbHost.Enabled := TRUE;
+  tbPort.Enabled := TRUE;
+  tbListenPort.Enabled := TRUE;
+  cbUseLogin.Enabled := TRUE;
+  cbUseRLogin.Enabled := TRUE;
+  cbUseLoginClick(Sender);
+  tbLoginName.Enabled := TRUE;
+  tbPassword.Enabled := TRUE;
+  tbGame.Enabled := TRUE;
+  TrayImage.Enabled := TRUE;
 
-//  tbHost.SetFocus;
+   tbHost.SetFocus;
 
-//  btnAdd.Enabled := FALSE;
-//  btnEdit.Enabled := FALSE;
-//  btnDelete.Enabled := FALSE;
+  btnAdd.Enabled := FALSE;
+  btnEdit.Enabled := FALSE;
+  btnDelete.Enabled := FALSE;
+  btnReset.Enabled := FALSE;
 
-//  cbGames.Enabled := FALSE;
-//  btnOKMain.Enabled := FALSE;
-//  btnCancelMain.Enabled := FALSE;
-//  btnSave.Enabled := TRUE;
-//  btnCancel.Enabled := TRUE;
+  cbGames.Enabled := FALSE;
+  btnOKMain.Enabled := FALSE;
+  btnCancelMain.Enabled := FALSE;
+  btnSave.Enabled := TRUE;
+  btnCancel.Enabled := TRUE;
 
-//  Edit := TRUE;
-//end;
+  Edit := TRUE;
+end;
 
 procedure TfrmSetup.btnResetClick(Sender: TObject);
 var
-  Result : Integer;
-  S, DB  : string;
-  Head : PDataHeader;
+  Result   : Integer;
+  S, DB    : string;
+  Head     : PDataHeader;
+  HFileRes : HFILE;
 begin
   if (cbGames.ItemIndex > -1) then
   begin
@@ -782,6 +821,14 @@ begin
     if S = DB then
       TWXDatabase.CloseDataBase;
 
+    // MB - check to see if the database is open in another instance
+    HFileRes := CreateFile(PChar(S),GENERIC_READ or GENERIC_WRITE,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+    if HFileRes = INVALID_HANDLE_VALUE then
+    Begin
+      MessageDlg('Error - Database is locked by anither instance.', mtWarning, [mbOK], 0);
+      Exit;
+    End;
+
     // delete selected database and refresh headers held in memory
     TWXServer.ClientMessage('Reseting database: ' + ANSI_7 + S);
     SetCurrentDir(FProgramDir);
@@ -793,8 +840,12 @@ begin
       // don't throw an error if couldn't delete .cfg file
     end;
 
+    // mb - delete script data
+    ClearScriptData(cbGames.Text);
+
     // create new database
     S := 'data\' + tbDescription.Text + '.xdb';
+    //CreateDir('data\' + tbDescription.Text);
 
     try
       TWXDatabase.CreateDatabase(S, Head^);
@@ -803,23 +854,15 @@ begin
       cbGames.OnChange (Self);
       Exit;
     end;
-
-//    UpdateGameList('data\' + tbDescription.Text + '.xdb');
-//    TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).New := TRUE;
-
-//    FreeMem(Head);
-
-    // Reload the header into the form.
-    //cbGames.OnChange(Self);
-
   end;
 end;
 
 
 procedure TfrmSetup.btnDeleteClick(Sender: TObject);
 var
-  Result : Integer;
-  S, DB  : string;
+  Result       : Integer;
+  S, DB, Name  : string;
+  HFileRes     : HFILE;
 begin
   if (cbGames.ItemIndex > -1) then
   begin
@@ -828,12 +871,21 @@ begin
     if (Result = mrNo) then
       Exit;
 
+    Name := cbGames.Text;
     S := UpperCase('data\' + cbGames.Text + '.xdb');
     DB := UpperCase(TWXDatabase.DatabaseName);
 
     // close the current database if it is being deleted
     if S = DB then
       TWXDatabase.CloseDataBase;
+
+    // MB - check to see if the database is open in another instance
+    HFileRes := CreateFile(PChar(S),GENERIC_READ or GENERIC_WRITE,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+    if HFileRes = INVALID_HANDLE_VALUE then
+    Begin
+      MessageDlg('Error - Database is locked by anither instance.', mtWarning, [mbOK], 0);
+      Exit;
+    End;
 
     // delete selected database and refresh headers held in memory
     TWXServer.ClientMessage('Deleting database: ' + ANSI_7 + S);
@@ -859,7 +911,45 @@ begin
     // Reload the header into the form.
     cbGames.OnChange(Self);
 
+    // mb - delete script data
+    ClearScriptData(Name);
+    RemoveDir(FProgramDir + '\data\' + Name);
   end;
+end;
+
+procedure TfrmSetup.ClearScriptData(Name: string);
+var
+  Result : Integer;
+  searchFile : TSearchRec;
+begin
+    Result := MessageDlg('Clear script data files for this database?', mtWarning, [mbYes, mbNo], 0);
+    if (Result = mrNo) then
+      Exit;
+
+    TWXServer.ClientMessage('Clearing script data files.');
+    try
+      if findfirst(FProgramDir + '\*_' + Name + '*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(searchFile.Name);
+      until FindNext(searchFile) <> 0;
+      FindClose(searchFile);
+
+      if findfirst(FProgramDir + '\data\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(FProgramDir + '\data\' + Name + '\' + searchFile.Name);
+      until FindNext(searchFile) <> 0;
+      FindClose(searchFile);
+      //RemoveDir(FProgramDir + '\data\' + Name);
+
+      if findfirst(FProgramDir + '\scripts\Mombot4p\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(FProgramDir + '\scripts\Mombot4p\Games\' + Name + '\' + searchFile.Name);
+      until FindNext(searchFile) <> 0;
+      FindClose(searchFile);
+      RemoveDir(FProgramDir + '\scripts\Mombot4p\Games\' + Name);
+    finally
+      FindClose(searchFile);
+    end;
 end;
 
 procedure TfrmSetup.cbUseLoginClick(Sender: TObject);
@@ -894,6 +984,7 @@ begin
   btnAdd.Enabled := TRUE;
   btnDelete.Enabled := TRUE;
   btnEdit.Enabled := TRUE;
+  btnReset.Enabled := TRUE;
 
   cbGames.Enabled := TRUE;
   btnOKMain.Enabled := TRUE;

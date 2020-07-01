@@ -38,8 +38,6 @@ object frmSetup: TfrmSetup
     OnChanging = PageControlChanging
     object tabServer: TTabSheet
       Caption = 'Server'
-      ExplicitLeft = 8
-      ExplicitTop = 28
       object Panel1: TPanel
         Left = 22
         Top = 79
@@ -274,7 +272,7 @@ object frmSetup: TfrmSetup
         Height = 25
         Caption = '&Edit'
         TabOrder = 4
-        OnClick = btnResetClick
+        OnClick = btnEditClick
       end
       object btnReset: TButton
         Left = 178
@@ -291,35 +289,42 @@ object frmSetup: TfrmSetup
       ImageIndex = 4
       object Label11: TLabel
         Left = 16
-        Top = 48
+        Top = 29
         Width = 138
         Height = 13
         Caption = 'Terminal menu activation key'
       end
       object Label10: TLabel
         Left = 16
-        Top = 67
+        Top = 48
         Width = 100
         Height = 13
         Caption = 'Maximum bubble size'
       end
       object Label21: TLabel
-        Left = 32
-        Top = 256
+        Left = 33
+        Top = 264
         Width = 79
         Height = 13
         Caption = 'External Address'
       end
       object Label22: TLabel
         Left = 212
-        Top = 115
+        Top = 81
         Width = 43
         Height = 13
         Caption = 'seconds.'
       end
+      object Label24: TLabel
+        Left = 33
+        Top = 220
+        Width = 71
+        Height = 13
+        Caption = 'Lerker Address'
+      end
       object cbAcceptExternal: TCheckBox
         Left = 24
-        Top = 230
+        Top = 242
         Width = 169
         Height = 17
         Caption = 'Accept external connections'
@@ -328,7 +333,7 @@ object frmSetup: TfrmSetup
       end
       object cbBroadcast: TCheckBox
         Left = 24
-        Top = 137
+        Top = 103
         Width = 241
         Height = 17
         Caption = 'Broadcast a message when a client connects'
@@ -338,7 +343,7 @@ object frmSetup: TfrmSetup
       end
       object tbMenuKey: TEdit
         Left = 168
-        Top = 46
+        Top = 27
         Width = 25
         Height = 21
         Font.Charset = DEFAULT_CHARSET
@@ -353,7 +358,7 @@ object frmSetup: TfrmSetup
       end
       object cbReconnect: TCheckBox
         Left = 24
-        Top = 114
+        Top = 80
         Width = 169
         Height = 17
         Caption = 'Automatically reconnect after'
@@ -361,7 +366,7 @@ object frmSetup: TfrmSetup
       end
       object cbCache: TCheckBox
         Left = 24
-        Top = 160
+        Top = 126
         Width = 209
         Height = 17
         Caption = 'Cache database in available memory'
@@ -371,7 +376,7 @@ object frmSetup: TfrmSetup
       end
       object tbBubbleSize: TEdit
         Left = 168
-        Top = 70
+        Top = 51
         Width = 57
         Height = 21
         TabOrder = 1
@@ -379,30 +384,31 @@ object frmSetup: TfrmSetup
       end
       object cbLocalEcho: TCheckBox
         Left = 24
-        Top = 184
+        Top = 150
         Width = 153
         Height = 17
         Caption = 'Local echo of outgoing text'
         TabOrder = 6
       end
       object tbExternalAddress: TEdit
-        Left = 120
-        Top = 253
+        Left = 118
+        Top = 265
         Width = 125
         Height = 21
         TabOrder = 7
       end
       object cbAllowLerkers: TCheckBox
         Left = 24
-        Top = 207
+        Top = 198
         Width = 209
         Height = 17
         Caption = 'Allow Lerkers (View Only Connections)'
         TabOrder = 8
+        OnClick = cbAcceptLerkerClick
       end
       object tbReconnectDelay: TEdit
         Left = 184
-        Top = 112
+        Top = 78
         Width = 25
         Height = 21
         Font.Charset = DEFAULT_CHARSET
@@ -415,10 +421,29 @@ object frmSetup: TfrmSetup
         Text = '15'
         OnChange = tbMenuKeyChange
       end
+      object tbLerkerAddress: TEdit
+        Left = 121
+        Top = 217
+        Width = 125
+        Height = 21
+        TabOrder = 10
+      end
+      object cbStreamingMode: TCheckBox
+        Left = 24
+        Top = 174
+        Width = 153
+        Height = 17
+        Caption = 'Enable Streaming Mode'
+        TabOrder = 11
+      end
     end
     object tabLogging: TTabSheet
       Caption = 'Logging'
       ImageIndex = 5
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Label9: TLabel
         Left = 16
         Top = 112
@@ -477,6 +502,10 @@ object frmSetup: TfrmSetup
     object tabAutoRun: TTabSheet
       Caption = 'Auto Run'
       ImageIndex = 3
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object lbAutoRun: TListBox
         Left = 24
         Top = 96
@@ -522,6 +551,10 @@ object frmSetup: TfrmSetup
       Caption = 'Registration'
       ImageIndex = 5
       TabVisible = False
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Label18: TLabel
         Left = 48
         Top = 88
@@ -616,6 +649,10 @@ object frmSetup: TfrmSetup
       Caption = 'Auth Proxy'
       ImageIndex = 4
       TabVisible = False
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Label6: TLabel
         Left = 56
         Top = 24

@@ -50,6 +50,7 @@ uses
   Core,
   Classes,
   SysUtils,
+  ShellApi,
   Menu,
   DataBase,
   Utility,
@@ -183,6 +184,7 @@ end;
 
 procedure CheckSector(Index : Integer);
 begin
+
   if (Index <= 0) or (Index > TWXDatabase.DBHeader.Sectors) then
     raise EScriptError.Create('Sector index out of bounds');
 end;
@@ -2289,7 +2291,6 @@ var
   Found : Boolean;
   I     : Integer;
   Data  : TStringList;
-  Param   : TVarParam;
   Indexes : TStringArray;
 begin
   Found := False;
@@ -2353,12 +2354,17 @@ begin
 end;
 
 function CmdClearGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  i : Integer;
 begin
+  for I := 0 to TWXGlobalVars.Count - 1 do
+    TGlobalVarItem(TWXGlobalVars[I]).Destroy;
 
   TWXGlobalVars.Clear;
 
   Result := caNone;
 end;
+
 
 function CmdSwitchBot(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
@@ -2451,6 +2457,83 @@ begin
   Result := caNone;
 end;
 
+function CmdGetBotList(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+   IniFile, INI : TIniFile;
+   FileName,
+   Alias,
+   Name,
+   ScriptFile,
+   NameVar,
+   BotName,
+   Section      : String;
+   BotList,
+   SectionList,
+   FileData     : TStringList;
+begin
+  IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+  INI := TINIFile.Create(TWXGUI.ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
+
+  fileData := TStringList.Create;
+
+  try
+    SectionList := TStringList.Create;
+    BotList := TStringList.Create;
+    IniFile.ReadSections(SectionList);
+    for Section in SectionList do
+    begin
+      if (Pos('bot:', LowerCase(Section)) = 1) then
+      begin
+        Alias  := StringReplace(Section, 'bot:', '', [rfReplaceAll, rfIgnoreCase]);
+        Name  := IniFile.ReadString(Section, 'Name', '');
+        ScriptFile  := IniFile.ReadString(Section, 'Script', '');
+        NameVar  := IniFile.ReadString(Section, 'NameVar', '');
+
+         BotName := '{}';
+        if Length(NameVar) > 0 then
+          if Pos('file:', LowerCase(NameVar)) = 0 then
+            BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
+          else
+          begin
+            FileName := StringReplace(NameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
+            FileName := StringReplace(FileName, '{GAME}', StringReplace(StripFileExtension(TWXDatabase.DatabaseName),'data\', '', [rfReplaceAll, rfIgnoreCase]), [rfReplaceAll, rfIgnoreCase]);
+            if (FileExists(TWXGUI.ProgramDir + '\' + FileName)) then
+            begin
+              try
+                fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
+                BotName := '{' + fileData[0] + '}';
+              finally
+                fileData.Free;
+              end;
+            end;
+          end;
+
+        if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
+        begin
+          if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
+            //BotList.add(Format('~D>~C%-8s ~G%s', [Alias, BotName]))
+            BotList.add(Format('%-8s %-6s %s <ACTIVE>', [BotName, Alias, Name]))
+          else
+            //BotList.add(Format('~C %-8s ~G%s', [Alias, BotName]));
+            BotList.add(Format('%-8s %-6s %s', [BotName, Alias, Name]));
+          end;
+        end;
+      end;
+  finally
+
+  end;
+
+  TVarParam(Params[0]).SetArrayFromStrings(BotList);
+  Params[0].Value := IntToStr(BotList.Count);
+
+  SectionList.Free;
+  BotList.Free;
+  IniFile.Free;
+  INI.Free;
+
+  Result := caNone;
+end;
+
 function CmdStripANSI(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
   S: String;
@@ -2469,7 +2552,7 @@ function CmdSetAutoTrigger(Script : TObject; Params : array of TCmdParam) : TCmd
 var
   Value : Integer;
 begin
-  // CMD: setTextLineTrigger <name> <label> [<value>]
+  // CMD: setAutoTrigger <name> <label> [<value>]
 
   // mb - set default lifecycle to 1 if not present
   if (Length(Params) < 4) then
@@ -2482,8 +2565,6 @@ begin
 end;
 
 function CmdSetAutoLineTrigger(Script : TObject; Params : array of TCmdParam) : TCmdAction;
-var
-  Value : Integer;
 begin
   // CMD: setTextLineTrigger <name> <label> [<value>]
 
@@ -2514,9 +2595,66 @@ begin
   end;
 end;
 
-function CmdSortArray(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+function CmdSort(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I     : Integer;
+  S     : String;
+  Data  : TStringList;
+  Indexes : TStringArray;
 begin
+  //CMD: SortArray <Array> <Sorted>
+  //     Sorts a single dimention array.
 
+  Data :=  TStringList.Create;
+  I := 1;
+
+  repeat
+  begin
+      SetLength(Indexes, 1);
+      Indexes[0] := IntToStr(I);
+
+      S :=  TVarParam(Params[0]).GetIndexVar(Indexes).Value;
+      if S <> '0' then
+        Data.Add(S);
+      I := I + 1;
+  end;
+  until S = '0';
+  Data.Sort;
+
+  Params[1].Value := IntToStr(Data.Count);
+  TVarParam(Params[1]).SetArrayFromStrings(Data);
+  Result := caNone;
+end;
+
+function CmdFind(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I,
+  Index : Integer;
+  S     : String;
+  Data  : TStringList;
+  Indexes : TStringArray;
+begin
+  //CMD: Find <Array> <Value> <Index>
+  //     Finds a value in a sorted array.
+
+  Data :=  TStringList.Create;
+  I := 1;
+
+  repeat
+  begin
+      SetLength(Indexes, 1);
+      Indexes[0] := IntToStr(I);
+
+      S :=  TVarParam(Params[0]).GetIndexVar(Indexes).Value;
+      if S <> '0' then
+        Data.Add(S);
+      I := I + 1;
+  end;
+  until S = '0';
+  Data.Sort;
+  Data.Find(Params[1].Value, Index);
+
+  Params[2].DecValue := Index + 1;
   Result := caNone;
 end;
 
@@ -2561,7 +2699,552 @@ begin
   Result := caNone;
 end;
 
+function CmdDirExists(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: dirExists var <filename>
 
+  if (directoryexists(Params[1].Value)) then
+    Params[0].Value := '1'
+  else
+    Params[0].Value := '0';
+
+  Result := caNone;
+end;
+
+function CmdLabelExists(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: fileExists var <filename>
+
+  if (TScript(Script).LabelExists(Params[1].Value)) then
+    Params[0].Value := '1'
+  else
+    Params[0].Value := '0';
+  Result := caNone;
+end;
+
+function CmdOpenInstance(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I   : Integer;
+  P   : String;
+begin
+  for I := 0 to Length(Params) - 1 do
+    P := P + Params[I].Value + ' ';
+
+  // CMD: OpenInstance <filename> <script>
+  ShellExecute(0,'open', pchar(TWXGUI.ProgramDir + '\twxp.exe'),
+  pchar(P), nil, SW_SHOWNORMAL) ;
+
+  Result := caNone;
+end;
+
+function CmdCloseInstance(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+const
+  WM_CLOSE = $0010;
+  WM_QUIT = $0012;
+var
+  ProcessID    : DWORD;
+  Instance     : String;
+  InstanceList : TStringList;
+  IniFile      : TIniFile;
+  Handle       : THandle;
+begin
+
+  if Params[0].Value = 'ALL' then
+  begin
+    InstanceList := TStringList.Create;
+    IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+    try
+      IniFile.ReadSection('Instances',InstanceList);
+      for Instance in InstanceList do
+      begin
+        ProcessID := IniFile.ReadInteger('Instances', Instance, 0);
+
+        Inifile.DeleteKey('Instances', Instance);
+
+        // Make sue instance is not the current instance
+        if GetCurrentProcessId() <> ProcessID then
+        begin
+          Handle := OpenProcess(PROCESS_TERMINATE, FALSE, ProcessID);
+          if Handle > 0 then
+            TerminateProcess(Handle, 0);
+
+            // MB - I would prefer to send WM_CLOSE or WM_QUIT
+            //      but TWXP ignores these messages
+            // Handle := FindWindow(nil, 'Untitled - Notepad');
+            // if Handle > 0 then
+            //  SendMessage(Handle, WM_CLOSE, 0, 0);
+            //
+            //  Handle := FindWindow(nil, pchar(Instance));
+            //  if Handle > 0 then
+            //    SendMessage(Handle, WM_CLOSE, 0, 0);
+
+        end;
+      end;
+    finally
+      InstanceList.Free;
+      IniFile.Free;
+    end;
+
+    // Terminate the current process last.
+    Handle := OpenProcess(PROCESS_TERMINATE, FALSE, GetCurrentProcessId());
+    if Handle > 0 then
+      SendMessage(Handle, WM_QUIT, 0, 0);
+        TerminateProcess(Handle, 0)
+  end
+  else
+  begin
+    IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+    try
+      Instance := StripFileExtension(ShortFilename(Params[0].Value));
+      ProcessID := IniFile.ReadInteger('Instances', Instance, 0);
+
+      Inifile.DeleteKey('Instances', Instance);
+
+      Handle := OpenProcess(PROCESS_TERMINATE, FALSE, ProcessID);
+        if Handle > 0 then
+          TerminateProcess(Handle, 0);
+    finally
+      IniFile.Free;
+    end;
+  end;
+
+  // CMD: CloseInstance <filename> <script>
+  Result := caNone;
+end;
+
+function GetDatabaseParams(Head : TDataHeader; Params : array of TCmdParam; Start : Integer) : TDataHeader;
+var
+  I : Integer;
+  SplitParams : TStringList;
+begin
+  SplitParams := TStringList.Create;
+
+  try
+  for I := Start to Length(Params) - 1 do
+  begin
+    SplitParams.clear;
+    Split(Params[I].Value, SplitParams, '=');
+
+    if SplitParams[0] = 'ServerAddress' then
+      Head.Address := SplitParams[1]
+    else if SplitParams[0] = 'ServerPort' then
+      Head.ServerPort := StrToIntDef(SplitParams[1], 2002)
+    else if SplitParams[0] = 'ListenPort' then
+      Head.ListenPort := StrToIntDef(SplitParams[1], 2300)
+    else if SplitParams[0] = 'ServerProtocal' then
+      if Uppercase(SplitParams[1]) = 'RLOGIN' then
+        Head.UseRLogin := True
+      else
+        Head.UseRLogin := False
+    else if SplitParams[0] = 'UseLoginScript' then
+      if SplitParams[1] = 'True' then
+        Head.UseLogin := True
+      else
+        Head.UseLogin := False
+    else if SplitParams[0] = 'LoginScript' then
+      Head.LoginScript := SplitParams[1]
+    else if SplitParams[0] = 'LoginName' then
+      Head.LoginName := SplitParams[1]
+    else if SplitParams[0] = 'Password' then
+      Head.Password := SplitParams[1]
+    else if SplitParams[0] = 'GameLetter' then
+      Head.Game := SplitParams[1][1]
+    else if SplitParams[0] = 'IconFile' then
+    begin
+      if (Pos(':', SplitParams[1]) > 0) then
+        Head.IconFile := TWXGUI.Programdir + '\' + SplitParams[1]
+      else
+        Head.IconFile := SplitParams[1];
+    end;
+  end;
+  finally
+    SplitParams.Free;
+  end;
+
+  Result := Head;
+end;
+
+procedure ClearScriptData(Name: string);
+var
+  Result : Integer;
+  searchFile : TSearchRec;
+begin
+    TWXServer.ClientMessage('Clearing script data files.');
+    try
+      if findfirst(TWXGUI.ProgramDir + '\*_' + Name + '*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(pchar(searchFile.Name));
+      until FindNext(searchFile) <> 0;
+      SysUtils.FindClose(searchFile);
+
+      if findfirst(TWXGUI.ProgramDir + '\data\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(pchar(TWXGUI.ProgramDir + '\data\' + Name + '\' + searchFile.Name));
+      until FindNext(searchFile) <> 0;
+      SysUtils.FindClose(searchFile);
+
+      if findfirst(TWXGUI.ProgramDir + '\scripts\Mombot4p\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      repeat
+        DeleteFile(pchar(TWXGUI.ProgramDir + '\scripts\Mombot4p\Games\' + Name + '\' + searchFile.Name));
+      until FindNext(searchFile) <> 0;
+      SysUtils.FindClose(searchFile);
+      RemoveDir(TWXGUI.ProgramDir + '\scripts\Mombot4p\Games\' + Name);
+    finally
+      SysUtils.FindClose(searchFile);
+    end;
+end;
+
+function CmdCopyDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Source, Dest : String;
+begin
+  // CMD: CopyDatabase <source> <dest>
+
+  Source := StripFileExtension(ShortFilename(Params[0].Value));
+  Dest   := StripFileExtension(ShortFilename(Params[1].Value));
+
+  CopyFile(pchar(TWXGUI.ProgramDir + '\data\' + Source + '.xdb'),
+           pchar(TWXGUI.ProgramDir + '\data\' + Dest + '.xdb'), FALSE);
+
+  CreateDir('data\' + Dest);
+
+
+  Result := caNone;
+end;
+
+function CmdCreateDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I        : Integer;
+  Database : String;
+  Head     : PDataHeader;
+begin
+  // CMD: CreateDatabase <Name> <Sectors> [Address] [ServerPort] [LisenPort]
+
+  I := 2;
+  while I < Length(params) do
+  begin
+    if pos('=', Params[I].Value) > 0 then break;
+    I := I + 1;
+  end;
+
+  if (Params[0].Value = '') or (Params[1].Value = '') then
+    exit;
+
+  Database := StripFileExtension(ShortFilename(Params[0].Value));
+
+  Head := GetBlankHeader;
+//DBHeader.ProgramName <> 'TWX DATABASE'
+  Head^.Sectors := StrToIntDef(Params[1].Value, 0);
+
+  if I > 2 then
+    Head^.Address := Params[2].Value;
+
+  if I > 3 then
+    Head^.ServerPort := StrToIntDef(Params[3].Value, 2002)
+  else
+    Head^.ServerPort := 2002;
+
+  if I > 4 then
+    Head^.ListenPort := StrToIntDef(Params[4].Value, 2300)
+  else
+    Head^.ListenPort := 2300;
+
+  IF I < Length(params) then
+    Head^ := GetDatabaseParams(Head^, Params, I);
+
+  if FileExists('data\' + Database + '.xdb') = FALSE then
+  begin
+    CreateDir('data\' + Database);
+
+    try
+      TWXDatabase.CreateDatabase('data\' + Database + '.xdb', Head^);
+    except
+    end;
+  end;
+
+  FreeMem(Head);
+
+  Result := caNone;
+end;
+
+function CmdDeleteDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  DB, Database : String;
+  HFileRes : HFile;
+begin
+  // CMD: DeleteDatabase <filename> <script>
+
+  Database := StripFileExtension(ShortFilename(Params[0].Value));
+  DB := StripFileExtension(ShortFilename(TWXDatabase.DatabaseName));
+
+  if UpperCase(DB) = UpperCase(Database) then
+    TWXDatabase.CloseDatabase;
+
+  if not FileExists('data\' + Database + '.xdb') then
+  begin
+    TWXServer.ClientMessage('Error: ' + ANSI_7 + 'Database ' + Database + ' does not exist.');
+    Exit;
+  End;
+
+
+  // MB - check to see if the database is open in another instance
+  HFileRes := CreateFile(PChar('data\' + Database + '.xdb'),GENERIC_READ or GENERIC_WRITE,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+  if HFileRes = INVALID_HANDLE_VALUE then
+  begin
+    TWXServer.ClientMessage('Error: ' + ANSI_7 + Database + ' is open in another instance.');
+    Exit;
+  End;
+
+  CloseHandle(HFileRes);
+
+  // delete selected database and refresh headers held in memory
+  TWXServer.ClientMessage('Deleting database: ' + ANSI_7 + Database);
+  SetCurrentDir(TWXGUI.ProgramDir);
+  DeleteFile(pchar('data\' + Database + '.xdb'));
+
+  try
+    DeleteFile(pchar('data\' + Database + '.cfg'));
+  except
+    // don't throw an error if couldn't delete .cfg file
+  end;
+
+
+  if Length(Params) > 1 then
+  begin
+    // mb - delete script data
+    ClearScriptData(Database);
+    RemoveDir(TWXGUI.ProgramDir + '\data\' + Database);
+  end;
+  Result := caNone;
+end;
+
+function CmdEditDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  DB, Database : String;
+  F            : File;
+  Head         : TDataHeader;
+begin
+  // CMD: EditDatabase <field> <value>
+
+  Database := StripFileExtension(ShortFilename(Params[0].Value));
+  DB := StripFileExtension(ShortFilename(TWXDatabase.DatabaseName));
+
+  if UpperCase(DB) = UpperCase(Database) then
+    TWXDatabase.CloseDatabase;
+
+  try
+    AssignFile(F, 'data\' + Database + '.xdb');
+    Reset(F, 1);
+    BlockRead(F, Head, SizeOf(TDataHeader));
+  finally
+    CloseFile(F);
+  end;
+
+  Head := GetDatabaseParams(Head, Params, 1);
+
+  try
+    AssignFile(F, 'data\' + Database + '.xdb');
+    Reset(F, 1);
+    BlockWrite(F, Head, SizeOf(TDataHeader));
+  finally
+    CloseFile(F);
+  end;
+end;
+
+
+
+function CmdListDatabases(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  SearchRec : TSearchRec;
+  Mask : String;
+  List : TStringList;
+begin
+  // CMD: ListDatabases varArray
+
+  Mask := 'data\*.xdb';
+  List := TStringList.Create;
+  try
+    if SysUtils.FindFirst(Mask, faAnyFile and not faDirectory, SearchRec) = 0 then
+    repeat
+      List.Add(SearchRec.Name);
+    until SysUtils.FindNext(SearchRec) <> 0;
+    SysUtils.FindClose(SearchRec);
+
+    TVarParam(Params[0]).SetArrayFromStrings(List);
+    Params[0].Value := IntToStr(List.Count);
+  finally
+    List.Free;
+  end;
+  Result := caNone;
+end;
+
+function CmdOpenDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Database : String;
+begin
+  // CMD: LoadDatabase <filename> <script>
+  Database := StripFileExtension(ShortFilename(Params[0].Value));
+
+  TWXDatabase.CloseDataBase;
+  TWXDatabase.OpenDatabase('data\' + Database + '.xdb');
+  Result := caNone;
+end;
+
+function CmdCloseDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+begin
+  // CMD: CloseDatabase
+
+  TWXDatabase.CloseDatabase;
+  Result := caNone;
+end;
+
+function CmdResetDatabase(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  DB, Database : String;
+  F            : File;
+  Head         : TDataHeader;
+  HFileRes     : HFile;
+begin
+  // CMD: ResetDatabase <Database> [ScriptData]
+
+  Database := StripFileExtension(ShortFilename(Params[0].Value));
+  DB := StripFileExtension(ShortFilename(TWXDatabase.DatabaseName));
+
+  if UpperCase(DB) = UpperCase(Database) then
+    TWXDatabase.CloseDatabase;
+
+  if not FileExists('data\' + Database + '.xdb') then
+  begin
+    TWXServer.ClientMessage('Error: ' + ANSI_7 + 'Database ' + Database + ' does not exist.');
+    Exit;
+  End;
+
+  // MB - check to see if the database is open in another instance
+  HFileRes := CreateFile(PChar('data\' + Database + '.xdb'),GENERIC_READ or GENERIC_WRITE,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+  if HFileRes = INVALID_HANDLE_VALUE then
+  begin
+    TWXServer.ClientMessage('Error: ' + ANSI_7 + Database + ' is open in another instance.');
+    Exit;
+  End;
+
+  CloseHandle(HFileRes);
+
+  try
+    AssignFile(F, 'data\' + Database + '.xdb');
+    Reset(F, 1);
+    BlockRead(F, Head, SizeOf(TDataHeader));
+  finally
+    CloseFile(F);
+  end;
+
+  Head.StarDock := 65535;
+
+  // delete selected database and refresh headers held in memory
+  TWXServer.ClientMessage('Resetting database: ' + ANSI_7 + Database);
+  SetCurrentDir(TWXGUI.ProgramDir);
+  DeleteFile(pchar('data\' + Database + '.xdb'));
+
+  try
+    DeleteFile(pchar('data\' + Database + '.cfg'));
+  except
+    // don't throw an error if couldn't delete .cfg file
+  end;
+
+  if Length(Params) > 1 then
+  begin
+    // mb - delete script data
+    ClearScriptData(Database);
+    RemoveDir(TWXGUI.ProgramDir + '\data\' + Database);
+  end;
+
+  try
+    TWXDatabase.CreateDatabase('data\' + Database + '.xdb', Head);
+  except
+    TWXServer.ClientMessage('Error: ' + ANSI_7 + 'Unable to create database ' + Database + '.');
+    Exit;
+  end;
+
+  if UpperCase(DB) = UpperCase(Database) then
+    TWXDatabase.OpenDatabase('data\' + Database + '.xdb');
+
+  Result := caNone;
+end;
+
+function CmdStartTimer(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I     : Integer;
+begin
+  // CMD: ResetDatabase <filename> <script>
+
+  // Search for an existing item and remove if found
+  for I := 0 to TWXTimers.Count - 1 do
+  begin
+    if TTimerItem(TWXTimers[I]).Name = TVarParam(Params[0]).Name then
+    begin
+      TTimerItem(TWXTimers[I]).Destroy;
+      TWXTimers.Delete(I);
+      break;
+    end;
+  end;
+
+  TWXTimers.Add(TTimerItem.Create(TVarParam(Params[0]).Name));
+
+  Result := caNone;
+end;
+
+function CmdStopTimer(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+  EndTime, Frequency : Int64;
+begin
+  // CMD: ResetDatabase <filename> <script>
+
+  Params[0].DecValue := 0;
+
+  for I := 0 to TWXTimers.Count - 1 do
+  begin
+    if TTimerItem(TWXTimers[I]).Name = TVarParam(Params[0]).Name then
+    begin
+      //Params[0].Value := FormatDateTime('hh:nn:ss', Time - TTimerItem(TWXTimers[I]).Time);
+      QueryPerformanceFrequency(Frequency);
+      QueryPerformanceCounter(EndTime);
+      Params[0].DecValue :=  ((EndTime - TTimerItem(TWXTimers[I]).StartTime) / Frequency) * 1000;
+      TTimerItem(TWXTimers[I]).Destroy;
+      TWXTimers.Delete(I);
+      break;
+    end;
+  end;
+
+  Result := caNone;
+end;
+
+function CmdStopAll(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+  StopSystem : Boolean;
+begin
+  // CMD: listActiveScripts <ArrayName>
+  if Length(Params) > 0 then
+    StopSystem := True
+  else
+    StopSystem := False;
+
+  I := 0;
+
+  while (I < TWXInterpreter.Count) do
+  begin
+    if (StopSystem) or not (TWXInterpreter.Scripts[I].System) then
+      if TWXInterpreter.Scripts[I] <> Script then
+        TWXInterpreter.Stop(I)
+      else
+        Inc(I)
+    else
+      Inc(I);
+  end;
+
+
+  Result := caNone;
+end;
 
 
 // *****************************************************************************
@@ -3559,16 +4242,16 @@ begin
   Result := TWXExtractor.CurrentShipClass
 end;
 
-function SCCurrentQuickStats(Indexes : TStringArray) : string;
+function SCCurrentAnsiQuickStats(Indexes : TStringArray) : string;
 begin
 
  Result := Format(
-   'SECT  = %-11s|HLD = %-4s|FIGS = %-6s|ARMID = %-4s|TWARP = %s'+#13+
-   'TURNS = %-11s|ORE = %-4s|SHLD = %-6s|LMPIT = %-4s|PLSCN = %s'+#13+
-   'CREDS = %-11s|ORG = %-4s|PHOT = %-6s|GTORP = %-4s|LRS   = %s'+#13+
-   'ALN   = %-11s|EQU = %-4s|CRBO = %-6s|ATMDT = %-4s|PSPRB = %s'+#13+
-   'EXP   = %-11s|COL = %-4s|MDIS = %-6s|BEACN = %-4s|EPRB  = %s'+#13+
-   'SHIP  = %-4s '+#13,
+   '~0~5SECT  ~2= ~1%-11s~3|~5HLD ~2= ~1%-4s~3|~5FIGS ~2= ~1%-6s~3|~5ARMID ~2= ~1%-4s~3|~5TWARP ~2= ~1%s'+#13+
+   '~5TURNS ~2= ~1%-11s~3|~5ORE ~2= ~1%-4s~3|~5SHLD ~2= ~1%-6s~3|~5LMPIT ~2= ~1%-4s~3|~5PLSCN ~2= ~1%s'+#13+
+   '~5CREDS ~2= ~1%-11s~3|~5ORG ~2= ~1%-4s~3|~5PHOT ~2= ~1%-6s~3|~5GTORP ~2= ~1%-4s~3|~5LRS   ~2= ~1%s'+#13+
+   '~5ALN   ~2= ~1%-11s~3|~5EQU ~2= ~1%-4s~3|~5CRBO ~2= ~1%-6s~3|~5ATMDT ~2= ~1%-4s~3|~5PSPRB ~2= ~1%s'+#13+
+   '~5EXP   ~2= ~1%-11s~3|~5COL ~2= ~1%-4s~3|~5MDIS ~1= ~1%-6s~3|~5BEACN ~2= ~1%-4s~3|~5EPRB  ~2= ~1%s'+#13+
+   '~5SHIP  ~2= ~1%-4s ~3%-8s'+#13,
   [SCCurrentSector(Indexes),
   SCCurrentTotalHolds(Indexes),
   SCCurrentFighters(Indexes),
@@ -3599,7 +4282,18 @@ begin
   SCCurrentBeacons(Indexes),
   SCCurrentEprobes(Indexes),
 
-  SCCurrentShipNumber(Indexes)]);
+  SCCurrentShipNumber(Indexes),
+  SCCurrentShipClass(Indexes)]);
+end;
+
+function SCCurrentQuickStats(Indexes : TStringArray) : string;
+var
+  qs : string;
+begin
+  qs := SCCurrentAnsiQuickStats(Indexes);
+  qs := TWXServer.ApplyQuickText(qs);
+  TWXExtractor.StripANSI(qs);
+  Result := qs;
 end;
 
 function SCCurrentQS(Indexes : TStringArray) : string;
@@ -3625,7 +4319,7 @@ Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s',
   SCCurrentColHolds(Indexes)]);
 end;
 
-function SCCurrentQSALL(Indexes : TStringArray) : string;
+function SCCurrentQSTAT(Indexes : TStringArray) : string;
 begin
 //Armd:Lmpt:GTorp:AtmDt:TWarp:Clks:Beacns:EPrb:MDis:PsPrb:PlScn:LRS
 Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s',
@@ -3659,6 +4353,71 @@ Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s
   SCCurrentScanType(Indexes)]);
 end;
 
+function SCBotList(Indexes : TStringArray) : string;
+var
+   IniFile, INI : TIniFile;
+   FileName,
+   Alias,
+   Name,
+   ScriptFile,
+   NameVar,
+   BotName,
+   BotList,
+   Section      : String;
+   SectionList  : TStringList;
+   I : Integer;
+   FileData : TStringList;
+begin
+  IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+  INI := TINIFile.Create(TWXGUI.ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
+
+  try
+    SectionList := TStringList.Create;
+    IniFile.ReadSections(SectionList);
+    for Section in SectionList do
+    begin
+      if (Pos('bot:', LowerCase(Section)) = 1) then
+      begin
+        Alias  := StringReplace(Section, 'bot:', '', [rfReplaceAll, rfIgnoreCase]);
+        Name  := IniFile.ReadString(Section, 'Name', '');
+        ScriptFile  := IniFile.ReadString(Section, 'Script', '');
+        NameVar  := IniFile.ReadString(Section, 'NameVar', '');
+
+        BotName := '{}';
+        if Length(NameVar) > 0 then
+          if Pos('file:', LowerCase(NameVar)) = 0 then
+            BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
+          else
+          begin
+            FileName := StringReplace(NameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
+            FileName := StringReplace(FileName, '{GAME}', StringReplace(StripFileExtension(TWXDatabase.DatabaseName),'data\', '', [rfReplaceAll, rfIgnoreCase]), [rfReplaceAll, rfIgnoreCase]);
+            if (FileExists(TWXGUI.ProgramDir + '\' + FileName)) then
+            begin
+              try
+                fileData := TStringList.Create;
+                fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
+                BotName := '{' + fileData[0] + '}';
+              finally
+                fileData.Free;
+              end;
+            end;
+          end;
+
+        if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
+        begin
+          BotList := BotList + Format('%-8s %-6s %s', [BotName, Alias, Name]);
+          if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
+             BotList := BotList +  ' <ACTIVE>';
+          end;
+          BotList := BotList +  chr(13);
+        end;
+      end;
+  finally
+  end;
+
+  Result := BotList;
+end;
+
 function SCActiveBot(Indexes : TStringArray) : string;
 begin
   Result := TWXInterpreter.ActiveBot;
@@ -3667,6 +4426,11 @@ end;
 function SCActiveBotScript(Indexes : TStringArray) : string;
 begin
   Result := TWXInterpreter.ActiveBotScript;
+end;
+
+function SCActiveBotName(Indexes : TStringArray) : string;
+begin
+  Result := TWXInterpreter.ActiveBotName;
 end;
 
 function SCTWXVersion(Indexes : TStringArray) : string;
@@ -3689,6 +4453,26 @@ begin
   Result := TWXExtractor.TW2002Ver;
 end;
 
+function SCSector_DeadEnd(Indexes : TStringArray) : string;
+var
+  SectIndex : Integer;
+  WarpsIn   : TList;
+begin
+  if (Length(Indexes) < 1) then
+    raise EScriptError.Create('Invalid parameters for SECTOR.WARPCOUNT[sector]');
+
+  ConvertToNumber(Indexes[0], SectIndex);
+  CheckSector(SectIndex);
+
+  WarpsIn := TWXDatabase.GetBackdoors(TWXDatabase.LoadSector(SectIndex), SectIndex);
+
+  if (TWXDatabase.Sectors[SectIndex].Warps = 1) and (WarpsIn.Count = 0) then
+    Result := '1'
+  else
+    Result := '0';
+
+  WarpsIn.Free;
+end;
 // *****************************************************************************
 //                             LIST BUILDER METHODS
 // *****************************************************************************
@@ -3805,16 +4589,19 @@ begin
     AddSysConstant('CURRENTCORP', SCCurrentCorp);
     AddSysConstant('CURRENTSHIPNUMBER', SCCurrentShipNumber);
     AddSysConstant('CURRENTSHIPCLASS', SCCurrentShipClass);
-    AddSysConstant('CURRENTANSIQUICKSTATS',SCCurrentQuickStats);
+    AddSysConstant('CURRENTANSIQUICKSTATS',SCCurrentAnsiQuickStats);
     AddSysConstant('CURRENTQUICKSTATS',SCCurrentQuickStats);
     AddSysConstant('CURRENTQS',SCCurrentQS);
-    AddSysConstant('CURRENTQSALL',SCCurrentQSALL);
+    AddSysConstant('CURRENTQSTAT',SCCurrentQSTAT);
+    AddSysConstant('BOTLIST',SCBotList);
     AddSysConstant('ACTIVEBOT',SCActiveBot);
     AddSysConstant('ACTIVEBOTSCRIPT',SCActiveBotScript);
+    AddSysConstant('ACTIVEBOTNAME',SCActiveBotName);
     AddSysConstant('VERSION',SCTWXVersion);
     AddSysConstant('TWGSTYPE',SCTWGSTYPE);
     AddSysConstant('TWGSVER',SCTWGSVer);
     AddSysConstant('TW2002VER',SCTW2002Ver);
+    AddSysConstant('SECTOR.DEADEND', SCSector_DeadEnd);
   end;
 end;
 
@@ -3961,26 +4748,40 @@ begin
     AddCommand('CLEARGLOBAL', 0, 0, CmdClearGlobal, [], pkValue);
 
     AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
-    AddCommand('GETBOTLIST', 0, 1, CmdSwitchBot, [pkValue], pkValue);
+
     AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
+
+    AddCommand('ADDQUICKTEXT', 2, 2, CmdAddQuickText, [pkValue], pkValue);
+    AddCommand('CLEARQUICKTEXT', 0, 1, CmdClearQuickText, [pkValue], pkValue);
+
+    AddCommand('GETBOTLIST', 1, 1, CmdGetBotList, [pkVar], pkValue);
+
     AddCommand('SETAUTOTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETAUTOTEXTTRIGGER', 3, 4, CmdSetAutoTrigger, [pkValue, pkValue, pkValue, pkValue], pkValue);
+
     AddCommand('REQVERSION', 1, 1, CmdReqVersion, [pkValue], pkValue);
-    AddCommand('SORTARRAY', 1, 1, CmdSortArray, [pkValue], pkValue);
-    AddCommand('MODULAS', 1, 1, CmdModulas, [pkValue], pkValue);
+    AddCommand('SORT', 2, 2, CmdSort, [pkValue], pkValue);
+    AddCommand('FIND', 3, 3, CmdFind, [pkValue], pkValue);
+    AddCommand('MODULAS', 2, 2, CmdModulas, [pkValue], pkValue);
+    AddCommand('DIREXISTS', 2, 2, CmdDirExists, [pkValue], pkValue);
+    AddCommand('LABELEXISTS', 2, 2, CmdLabelExists, [pkValue], pkValue);
 
-    AddCommand('SETQUICKTEXT', 2, 2, CmdAddQuickText, [pkValue], pkValue);
-    AddCommand('CLEARQUICKTEXT', 1, 0, CmdClearQuickText, [pkValue], pkValue);
+    AddCommand('OPENINSTANCE', 0, -1, CmdOpenInstance, [pkValue], pkValue);
+    AddCommand('CLOSEINSTANCE', 1, 1, CmdCloseInstance, [pkValue], pkValue);
 
-//    AddCommand('COPYDATABASE', 1, 1, CmdCopyDatabase, [pkValue], pkValue);
-//    AddCommand('CREATEDATABASE', 1, 1, CmdCreateDatabase, [pkValue], pkValue);
-//    AddCommand('DELETEDATABASE', 1, 1, CmdDeleteDatabase, [pkValue], pkValue);
-//    AddCommand('EDITDATABASE', 1, 1, CmdEditDatabase, [pkValue], pkValue);
-//    AddCommand('LISTDATABASES', 1, 1, CmdListDatabases, [pkValue], pkValue);
-//    AddCommand('LOADDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
-//    AddCommand('RESETDATABASE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
-//    AddCommand('NEWINSTANCE', 1, 1, CmdLoadDatabase, [pkValue], pkValue);
+    AddCommand('COPYDATABASE', 2, 2, CmdCopyDatabase, [pkValue], pkValue);
+    AddCommand('CREATEDATABASE', 2, -1, CmdCreateDatabase, [pkValue], pkValue);
+    AddCommand('DELETEDATABASE', 1, 2, CmdDeleteDatabase, [pkValue], pkValue);
+    AddCommand('EDITDATABASE', 1, -1, CmdEditDatabase, [pkValue], pkValue);
+    AddCommand('LISTDATABASES', 1, 1, CmdListDatabases, [pkValue], pkValue);
+    AddCommand('OPENDATABASE', 1, 1, CmdOpenDatabase, [pkValue], pkValue);
+    AddCommand('CLOSEDATABASE', 0, 0, CmdCloseDatabase, [pkValue], pkValue);
+    AddCommand('RESETDATABASE', 1, 2, CmdResetDatabase, [pkValue], pkValue);
 
+    AddCommand('STARTTIMER', 1, 1, CmdStartTimer, [pkValue], pkValue);
+    AddCommand('STOPTIMER', 1, 1, CmdStopTimer, [pkValue], pkValue);
+
+    AddCommand('STOPALL', 0, 1, CmdStopAll, [pkValue], pkValue);
 
 
     //    AddCommand('', 1, 1, Cmd, [pkValue], pkValue);
