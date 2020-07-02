@@ -8,7 +8,7 @@ Changes in 2.06.06
 + Added modulas command and operator
 + Added dirExists and labelExists commands
 + Added openInstabce and closetInstance commands
-+ Added 8 Databse Managment commands
++ Added 8 Database Managment commands
 + Added startTimer and stopTimer commands
 + Added Stop All Scripts to popup menu and stopAll command
 + Added Reset Database Feature - For rebangs or script testing
