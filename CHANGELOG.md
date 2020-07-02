@@ -6,7 +6,7 @@ Changes in 2.06.06
 + Added reqVersion command
 + added sort and find commands for single dimention arrays
 + Added modulas command and operator
-+ Added dieExists and labelExists commands
++ Added dirExists and labelExists commands
 + Added openInstabce and clostInstance commands
 + Added 8 Databse Managment commands
 + Added startTimer and stopTimer commands
