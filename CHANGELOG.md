@@ -7,7 +7,7 @@ Changes in 2.06.06
 + added sort and find commands for single dimention arrays
 + Added modulas command and operator
 + Added dirExists and labelExists commands
-+ Added openInstabce and clostInstance commands
++ Added openInstabce and closetInstance commands
 + Added 8 Databse Managment commands
 + Added startTimer and stopTimer commands
 + Added Stop All Scripts to popup menu and stopAll command
