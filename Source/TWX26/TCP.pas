@@ -421,7 +421,7 @@ begin
   Text := ApplyQuickText(Text);
 
   Stream := Text;
-  for I := 0 to length(Stream) - 1 do
+  for I := 0 to length(Stream) do
   begin
     if (Stream[I] = #27) then
       InAnsi := TRUE;
@@ -596,7 +596,7 @@ begin
    if (RemoteAddress = '127.0.0.1') or
       (AcceptExternal and LocalClient) or
       (AllowLerkers and Lerker) then
-      Socket.SendText(endl + ANSI_13 + 'TWX Proxy Server ' + ANSI_11 + 'v' +
+      Socket.SendText(endl + ANSI_12 + 'TWX Proxy Server ' + ANSI_11 + 'v' +
         ProgramVersion + chr(ReleaseNumber + 96) + ANSI_7 + ' (' + ReleaseVersion + ')' + endl)
    else
    begin
@@ -610,11 +610,21 @@ begin
      exit;
    end;
 
+    try
+      if IniFile.ReadString('TWX Proxy', 'UpdateAvailable', 'False') = 'True' then
+      begin
+        Socket.SendText(endl + ANSI_15 +
+          'An updated verion of TWX Proxy is available. To download please visit: ' + endl +
+          'https://github.com/MicroBlaster/TWXProxy/wiki' + endl + ANSI_7);
+      end;
+    finally
+      IniFile.Free;
+    end;
 
   if (BroadCastMsgs) then
-    Broadcast(endl + ANSI_2 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl + endl)
+    Broadcast(endl + ANSI_13 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl)
   else
-    Socket.SendText(endl + ANSI_2 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl);
+    Socket.SendText(endl + ANSI_13 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl);
 
 
   begin
@@ -622,15 +632,15 @@ begin
     Socket.SendText(#255 + OP_DO + #246);
     FClientEchoMarks[Index] := FALSE;
 
-    if (ReleaseVersion = 'Alpha') then
-      Socket.SendText(ANSI_11 + 'NOTICE: ' + ANSI_13 +
-                      'Alpha releases have not had sufficent testing, and may' + endl +
-                      'be unstable. Please do not distribute, and use at your own risk.' + endl);
+//    if (ReleaseVersion = 'Alpha') then
+//      Socket.SendText(ANSI_11 + 'NOTICE: ' + ANSI_13 +
+//                      'Alpha releases have not had sufficent testing, and may' + endl +
+//                      'be unstable. Please do not distribute, and use at your own risk.' + endl);
 
-    if (ReleaseVersion = 'Beta') then
-      Socket.SendText(endl + ANSI_11 + 'NOTICE: ' + ANSI_13 +
-                      'Beta releases are generally considered stable, but may have' + endl +
-                      'unresolved issues. Use at your own risk.' + endl);
+//    if (ReleaseVersion = 'Beta') then
+//      Socket.SendText(endl + ANSI_11 + 'NOTICE: ' + ANSI_13 +
+//                      'Beta releases are generally considered stable, but may have' + endl +
+//                      'unresolved issues. Use at your own risk.' + endl);
 
     if (AcceptExternal) or (AllowLerkers) then
       Socket.SendText(endl + ANSI_12 + 'WARNING: ' + ANSI_14 +
@@ -638,16 +648,6 @@ begin
                       'you are open to foreign users monitoring data remotely.' + endl);
 
     Socket.SendText(endl);
-    try
-      if IniFile.ReadString('TWX Proxy', 'UpdateAvailable', 'False') = 'True' then
-      begin
-        Socket.SendText(ANSI_15 +
-          'An updated verion of TWX Proxy is available. To download please visit: ' + endl +
-          'https://github.com/MicroBlaster/TWXProxy/wiki' + endl + endl + ANSI_7);
-      end;
-    finally
-      IniFile.Free;
-    end;
 
     if TWXDatabase.DataBaseOpen then
       Socket.SendText(ANSI_10 + 'Using Database ' + ANSI_14 + TWXDatabase.DatabaseName + ANSI_10 + ' w/ ' +

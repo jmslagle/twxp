@@ -2658,7 +2658,7 @@ begin
   Result := caNone;
 end;
 
-function CmdModulas(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+function CmdModulus(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
   F1,
   F2 : integer;
@@ -2786,10 +2786,10 @@ begin
     end;
 
     // Terminate the current process last.
-    Handle := OpenProcess(PROCESS_TERMINATE, FALSE, GetCurrentProcessId());
-    if Handle > 0 then
-      SendMessage(Handle, WM_QUIT, 0, 0);
-        TerminateProcess(Handle, 0)
+    //Handle := OpenProcess(PROCESS_TERMINATE, FALSE, GetCurrentProcessId());
+    //if Handle > 0 then
+    //  SendMessage(Handle, WM_QUIT, 0, 0);
+    //    TerminateProcess(Handle, 0)
   end
   else
   begin
@@ -3126,7 +3126,6 @@ begin
     TWXServer.ClientMessage('Error: ' + ANSI_7 + Database + ' is open in another instance.');
     Exit;
   End;
-
   CloseHandle(HFileRes);
 
   try
@@ -4762,7 +4761,7 @@ begin
     AddCommand('REQVERSION', 1, 1, CmdReqVersion, [pkValue], pkValue);
     AddCommand('SORT', 2, 2, CmdSort, [pkValue], pkValue);
     AddCommand('FIND', 3, 3, CmdFind, [pkValue], pkValue);
-    AddCommand('MODULAS', 2, 2, CmdModulas, [pkValue], pkValue);
+    AddCommand('MODULUS', 2, 2, CmdModulus, [pkValue], pkValue);
     AddCommand('DIREXISTS', 2, 2, CmdDirExists, [pkValue], pkValue);
     AddCommand('LABELEXISTS', 2, 2, CmdLabelExists, [pkValue], pkValue);
 
