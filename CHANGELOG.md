@@ -15,6 +15,7 @@ Changes in 2.06.06
 + Added Streaming Mode feature - Hides numbers from your stream
 + Enhance Delete Database Feature - Optionally deletes script created data
 + Fixed - Issue 46 List index out of bounds - fatal crash
++ Fixed - ClearGlobal is now ClearGlobals as documented (typo)
 + Compiler will now throw an exception on duplicate label
 
 Changes in 2.06.05
