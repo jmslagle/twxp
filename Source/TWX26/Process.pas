@@ -1416,6 +1416,9 @@ begin
   // Remove bells
   StripChar(S, #7);
 
+  // mb - need to convert quicktexts, so they can be removed.
+  S := TWXServer.ApplyQuickText(S);
+
   for I := 1 to length(S) do
   begin
     if (S[I] = #27) then

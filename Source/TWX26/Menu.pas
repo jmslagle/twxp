@@ -705,7 +705,7 @@ begin
     Menu.Help := 'Deafs clients are telnet terminals that don''t receive anything from the remote server.  This option will '
       + 'turn your connected terminal into a ''deaf'' terminal.  This is great if you have a fast-paced script running in the background and you want to query your database.';
     AddItem(Menu);
-    Menu := TTWXMenuItem.Create(Self, 'TWX_STREAMINGMODE', miStreamingMode, 'Enable Streaming Mode', '', 'A');
+    Menu := TTWXMenuItem.Create(Self, 'TWX_STREAMINGMODE', miStreamingMode, 'Enable Streaming Mode', '', '/');
     Menu.Help := 'Enables streaming mode for this client. This will '
       + 'allow you to share your screan without revealing your location or the location of your assets.';
     AddItem(Menu);
@@ -1134,7 +1134,7 @@ begin
   if (ClientIndex > TWXServer.ClientCount - 1) then
     Exit;
 
-  TWXServer.ClientMessage('Client ' + IntToStr(ClientIndex) + ' is now deaf');
+  TWXServer.ClientMessage('Client ' + IntToStr(ClientIndex) + ' is now in Streaming Mode');
   TWXServer.ClientTypes[ClientIndex] := ctStream;
 end;
 

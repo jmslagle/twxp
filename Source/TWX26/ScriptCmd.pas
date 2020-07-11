@@ -2353,7 +2353,7 @@ begin
   Result := caNone;
 end;
 
-function CmdClearGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+function CmdClearGlobals(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
   i : Integer;
 begin
@@ -2489,10 +2489,10 @@ begin
         ScriptFile  := IniFile.ReadString(Section, 'Script', '');
         NameVar  := IniFile.ReadString(Section, 'NameVar', '');
 
-         BotName := '{}';
+         BotName := '~f{~c~f}';
         if Length(NameVar) > 0 then
           if Pos('file:', LowerCase(NameVar)) = 0 then
-            BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
+            BotName := '~f{~c' + INI.ReadString('Variables', NameVar, '0') + '~f}'
           else
           begin
             FileName := StringReplace(NameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
@@ -2501,21 +2501,25 @@ begin
             begin
               try
                 fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
-                BotName := '{' + fileData[0] + '}';
+                BotName := '~f{~c' + fileData[0] + '~f}';
               finally
                 fileData.Free;
               end;
             end;
           end;
 
+          if BotName = '~f{~c0~f}' then
+            BotName := '~f{~c~f}';
+
+
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
             //BotList.add(Format('~D>~C%-8s ~G%s', [Alias, BotName]))
-            BotList.add(Format('%-8s %-6s %s <ACTIVE>', [BotName, Alias, Name]))
+            BotList.add(Format('%-14s ~G%-6s ~F%s ~B<ACTIVE>', [BotName, Alias, Name]))
           else
             //BotList.add(Format('~C %-8s ~G%s', [Alias, BotName]));
-            BotList.add(Format('%-8s %-6s %s', [BotName, Alias, Name]));
+            BotList.add(Format('%-14s ~G%-6s ~F%s', [BotName, Alias, Name]))
           end;
         end;
       end;
@@ -2617,6 +2621,8 @@ begin
       if S <> '0' then
         Data.Add(S);
       I := I + 1;
+      if (TVarParam(Params[0]).ArraySize > 0) and (I > TVarParam(Params[0]).ArraySize) then
+        break;
   end;
   until S = '0';
   Data.Sort;
@@ -2629,12 +2635,56 @@ end;
 function CmdFind(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
   I,
-  Index : Integer;
+  Start : Integer;
   S     : String;
-  Data  : TStringList;
   Indexes : TStringArray;
 begin
-  //CMD: Find <Array> <Value> <Index>
+  //CMD: Find <Array> <Value> <Index> [Start]
+  //     Finds the specified value in an array of strings.
+
+  IF Length(params) > 3 then
+    Start := strtointdef(params[3].Value,1)
+  else
+    Start := 1;
+
+  I := 1;
+  Params[2].DecValue := 0;
+
+  repeat
+  begin
+      SetLength(Indexes, 1);
+      Indexes[0] := IntToStr(I);
+
+      S :=  TVarParam(Params[0]).GetIndexVar(Indexes).Value;
+      if (S <> '0') and (Pos(uppercase(Params[1].Value), uppercase(S)) > 0) then
+        if Start > 1 then
+          Start := Start -1
+        else
+          if Params[2].DecValue = 0 then
+            Params[2].DecValue := i;
+      I := I + 1;
+      if (TVarParam(Params[0]).ArraySize > 0) and (I > TVarParam(Params[0]).ArraySize) then
+        break;
+  end;
+  until S = '0';
+
+  if S = '0' then
+    Params[0].DecValue := I - 2
+  else
+    Params[0].DecValue := I - 1;
+
+  Result := caNone;
+end;
+
+function CmdFindAll(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I,
+  Index   : Integer;
+  S       : String;
+  Data    : TStringList;
+  Indexes : TStringArray;
+begin
+  //CMD: Find <SourceArray> <FoundArray>
   //     Finds a value in a sorted array.
 
   Data :=  TStringList.Create;
@@ -2646,17 +2696,19 @@ begin
       Indexes[0] := IntToStr(I);
 
       S :=  TVarParam(Params[0]).GetIndexVar(Indexes).Value;
-      if S <> '0' then
+      if (S <> '0') and (Pos(uppercase(Params[2].Value), uppercase(S)) > 0) then
         Data.Add(S);
       I := I + 1;
+      if (TVarParam(Params[0]).ArraySize > 0) and (I > TVarParam(Params[0]).ArraySize) then
+        break;
   end;
   until S = '0';
-  Data.Sort;
-  Data.Find(Params[1].Value, Index);
 
-  Params[2].DecValue := Index + 1;
+  Params[1].Value := IntToStr(Data.Count);
+  TVarParam(Params[1]).SetArrayFromStrings(Data);
   Result := caNone;
 end;
+
 
 function CmdModulus(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
@@ -2866,7 +2918,6 @@ end;
 
 procedure ClearScriptData(Name: string);
 var
-  Result : Integer;
   searchFile : TSearchRec;
 begin
     TWXServer.ClientMessage('Clearing script data files.');
@@ -4364,7 +4415,6 @@ var
    BotList,
    Section      : String;
    SectionList  : TStringList;
-   I : Integer;
    FileData : TStringList;
 begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
@@ -4402,9 +4452,12 @@ begin
             end;
           end;
 
+        if BotName = '{0}' then
+          BotName := '{}';
+
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
-          BotList := BotList + Format('%-8s %-6s %s', [BotName, Alias, Name]);
+          BotList := BotList + Format('  %-8s %-6s %s', [BotName, Alias, Name]);
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
              BotList := BotList +  ' <ACTIVE>';
           end;
@@ -4420,6 +4473,11 @@ end;
 function SCActiveBot(Indexes : TStringArray) : string;
 begin
   Result := TWXInterpreter.ActiveBot;
+end;
+
+function SCActiveBotDir(Indexes : TStringArray) : string;
+begin
+  Result := TWXInterpreter.ActiveBotDir;
 end;
 
 function SCActiveBotScript(Indexes : TStringArray) : string;
@@ -4594,6 +4652,7 @@ begin
     AddSysConstant('CURRENTQSTAT',SCCurrentQSTAT);
     AddSysConstant('BOTLIST',SCBotList);
     AddSysConstant('ACTIVEBOT',SCActiveBot);
+    AddSysConstant('ACTIVEBOTDIR',SCActiveBotDir);
     AddSysConstant('ACTIVEBOTSCRIPT',SCActiveBotScript);
     AddSysConstant('ACTIVEBOTNAME',SCActiveBotName);
     AddSysConstant('VERSION',SCTWXVersion);
@@ -4744,7 +4803,7 @@ begin
 
     AddCommand('SAVEGLOBAL', 1, 1, CmdSaveGlobal, [pkValue], pkValue);
     AddCommand('LOADGLOBAL', 1, 1, CmdLoadGlobal, [pkValue], pkValue);
-    AddCommand('CLEARGLOBAL', 0, 0, CmdClearGlobal, [], pkValue);
+    AddCommand('CLEARGLOBALS', 0, 0, CmdClearGlobals, [], pkValue);
 
     AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
 
@@ -4760,7 +4819,8 @@ begin
 
     AddCommand('REQVERSION', 1, 1, CmdReqVersion, [pkValue], pkValue);
     AddCommand('SORT', 2, 2, CmdSort, [pkValue], pkValue);
-    AddCommand('FIND', 3, 3, CmdFind, [pkValue], pkValue);
+    AddCommand('FIND', 3, 4, CmdFind, [pkValue], pkValue);
+    AddCommand('FINDALL', 3, 3, CmdFindAll, [pkValue], pkValue);
     AddCommand('MODULUS', 2, 2, CmdModulus, [pkValue], pkValue);
     AddCommand('DIREXISTS', 2, 2, CmdDirExists, [pkValue], pkValue);
     AddCommand('LABELEXISTS', 2, 2, CmdLabelExists, [pkValue], pkValue);

@@ -122,6 +122,7 @@ type
     function GetAutoRunText: string;
     procedure SetAutoRunText(Value: string);
     procedure OntmrTimeTimer(Sender: TObject);
+    function GetActiveBotDir : String;
     function GetActiveBotName : String;
   protected
     { ITWXGlobals }
@@ -153,7 +154,8 @@ type
     property Count : Integer read GetCount;
     property LastScript : string read FLastScript;
     property ActiveBot : string read FActiveBot;
-    property ActiveBotScript   : string read FActiveBotScript;
+    property ActiveBotDir : string read GetActiveBotDir;
+    property ActiveBotScript : string read FActiveBotScript;
     property ActiveBotName   : string read GetActiveBotName;
     property ScriptMenu : TMenuItem read FScriptMenu write FScriptMenu;
     property ScriptRef : TScriptRef read FScriptRef;
@@ -560,19 +562,45 @@ begin
   end;
 end;
 
+function TModInterpreter.GetActiveBotDir() : String;
+begin
+  result := StringReplace(ExtractFileDir(FActiveBotScript),
+              FProgramDir,'',[rfReplaceAll, rfIgnoreCase]);
+end;
+
 function TModInterpreter.GetActiveBotName() : String;
 var
-  INI : TINIFile;
+   INI       : TIniFile;
+   FileName  : String;
+   FileData  : TStringList;
 begin
   INI := TINIFile.Create(FProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
 
   if Length(FActiveBotNameVar) > 0 then
-    result := INI.ReadString('Variables', FActiveBotNameVar, '0')
+    if Pos('file:', LowerCase(FActiveBotNameVar)) = 0 then
+      result := INI.ReadString('Variables', FActiveBotNameVar, '0')
+    else
+    begin
+      FileName := StringReplace(FActiveBotNameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
+      FileName := StringReplace(FileName, '{GAME}', StringReplace(StripFileExtension(TWXDatabase.DatabaseName),'data\', '', [rfReplaceAll, rfIgnoreCase]), [rfReplaceAll, rfIgnoreCase]);
+      if (FileExists(TWXGUI.ProgramDir + '\' + FileName)) then
+      begin
+        fileData := TStringList.Create;
+        try
+          fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
+          result := fileData[0];
+        except
+          result := '';
+        end;
+        fileData.Free;
+      end;
+    end
   else
     result := '';
 
   INI.Free;
 end;
+
 
 procedure TModInterpreter.ProgramEvent(EventName, MatchText : string; Exclusive : Boolean);
 var
@@ -1747,7 +1775,6 @@ end;
 
 function TScript.LabelExists(L : string) : Boolean;
 var
-  Error : Boolean;
   I     : Integer;
 begin
   // seek label with name L

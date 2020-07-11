@@ -1147,9 +1147,9 @@ type
       end
       else if (Branch^.Op = '%') then
       begin
-        // division (%): modulas Value1 by Value2
+        // division (%): modulus Value1 by Value2
         RecurseCmd(['SETVAR', Result, Value1], Line, ScriptID);
-        RecurseCmd(['MODULAS', Result, Value2], Line, ScriptID);
+        RecurseCmd(['MODULUS', Result, Value2], Line, ScriptID);
       end
       else if (Branch^.Op = '&') then
         // concatenation (&): concatenate both values
@@ -1661,7 +1661,7 @@ begin
                 if Last = '/' then
                   ParamLine.Append('DIVIDE');
                 if Last = '%' then
-                  ParamLine.Append('MODULAS');
+                  ParamLine.Append('MODULUS');
                 if Last = '+' then
                   ParamLine.Append('ADD');
                 if Last = '-' then
