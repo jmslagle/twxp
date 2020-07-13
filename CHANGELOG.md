@@ -5,7 +5,8 @@ Changes in 2.06.06
 + Added setAutoTrigger command
 + Added reqVersion command
 + added sort and find commands for single dimention arrays
-+ Added modulas command and operator
++ Added modulas command (%) and operator (%=)
++ Added mergetext operator (&=)
 + Added dirExists and labelExists commands
 + Added openInstabce and closetInstance commands
 + Added 8 Database Managment commands
