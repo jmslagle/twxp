@@ -41,7 +41,8 @@ namespace TWX3
 
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
-
+            Window setup = new Setup();
+            setup.ShowDialog();
         }
 
         private void ExitButtonClick(object sender, RoutedEventArgs e)
@@ -51,6 +52,21 @@ namespace TWX3
         }
 
         private void DabaseComBoxSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+
+        }
+
+        private void ScriptsButtonClick(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void DataButtonClick(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void HelpButtonClick(object sender, RoutedEventArgs e)
         {
 
         }
