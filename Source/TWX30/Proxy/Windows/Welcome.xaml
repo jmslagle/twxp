@@ -19,7 +19,7 @@
             </TextBlock>
             
             <Label x:Name="WikiLink" HorizontalAlignment="Left" Margin="75,183,0,0" VerticalAlignment="Top" Foreground="Magenta" MouseDown="WikiLinkClick" Opacity=".7">
-                <TextBlock TextDecorations="Underline" FontSize="12pt"><Run Text="https://github.com/MicroBlaster/TWX3/wiki"/></TextBlock>
+                <TextBlock TextDecorations="Underline" FontSize="12pt"><Run Text="https://github.com/tw2002/twxp/wiki"/></TextBlock>
             </Label>
 
             <TextBlock Margin="68,0,-3,52" VerticalAlignment="Bottom" Height="25" Text="You must create a new database before connecting to a server." Foreground="White"/>
