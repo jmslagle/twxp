@@ -1429,7 +1429,10 @@ begin
   // CMD: mergeText <value1> <value2> var
   // Concatenate two values and store the result
 
-  Params[2].Value := Params[0].Value + Params[1].Value;
+  if Length(Params) = 3 then
+    Params[2].Value := Params[0].Value + Params[1].Value
+  else
+    Params[0].Value := Params[0].Value + Params[1].Value;
 
   Result := caNone;
 end;
@@ -2380,7 +2383,7 @@ begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
   NextBot := '';
 
-  if (Length(Params) = 1) and (Params[0].Value <> '') and (Params[0].Value <> '0') then
+  if (Length(Params) > 0) and (Params[0].Value <> '') and (Params[0].Value <> '0') then
   begin
   try
     SectionList := TStringList.Create;
@@ -2452,7 +2455,12 @@ begin
 
   // Load the selected bot
   if (NextBot <> '') then
-    TWXInterpreter.SwitchBot(NextBot, FALSE);
+    if (Length(Params) > 1) and (Params[1].Value <> '0') then
+      TWXInterpreter.SwitchBot(NextBot, Params[1].Value, FALSE)
+    else
+      TWXInterpreter.SwitchBot(NextBot, '', FALSE);
+
+
 
   Result := caNone;
 end;
@@ -4403,6 +4411,11 @@ Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s
   SCCurrentScanType(Indexes)]);
 end;
 
+function SCGameData(Indexes : TStringArray) : string;
+begin
+  Result := StripFileExtension(TWXDatabase.DatabaseName) + '\';
+end;
+
 function SCBotList(Indexes : TStringArray) : string;
 var
    IniFile, INI : TIniFile;
@@ -4650,6 +4663,7 @@ begin
     AddSysConstant('CURRENTQUICKSTATS',SCCurrentQuickStats);
     AddSysConstant('CURRENTQS',SCCurrentQS);
     AddSysConstant('CURRENTQSTAT',SCCurrentQSTAT);
+    AddSysConstant('GAMEDATA',SCGameData);
     AddSysConstant('BOTLIST',SCBotList);
     AddSysConstant('ACTIVEBOT',SCActiveBot);
     AddSysConstant('ACTIVEBOTDIR',SCActiveBotDir);
@@ -4717,7 +4731,7 @@ begin
     AddCommand('LOADVAR', 1, 1, CmdLoadVar, [pkVar], pkValue);
     AddCommand('LOGGING', 1, 1, CmdLogging, [pkValue], pkValue);
     AddCommand('LOWERCASE', 1, 1, CmdLowerCase, [pkVar], pkValue);
-    AddCommand('MERGETEXT', 3, 3, CmdMergeText, [pkValue, pkValue, pkVar], pkValue);
+    AddCommand('MERGETEXT', 2, 3, CmdMergeText, [pkValue, pkValue, pkVar], pkValue);
     AddCommand('MULTIPLY', 2, 2, CmdMultiply, [pkVar, pkValue], pkValue);
     AddCommand('OPENMENU', 1, 2, CmdOpenMenu, [pkValue, pkValue], pkValue);
     AddCommand('OR', 2, 2, CmdOr, [pkVar, pkValue], pkValue);
@@ -4805,7 +4819,7 @@ begin
     AddCommand('LOADGLOBAL', 1, 1, CmdLoadGlobal, [pkValue], pkValue);
     AddCommand('CLEARGLOBALS', 0, 0, CmdClearGlobals, [], pkValue);
 
-    AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
+    AddCommand('SWITCHBOT', 0, 2, CmdSwitchBot, [pkValue], pkValue);
 
     AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
 

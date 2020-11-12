@@ -114,6 +114,7 @@ type
     FActiveBot,
     FActiveBotScript,
     FActiveBotNameVar,
+    FActiveCommsVar,
     FProgramDir: string;
 
     function GetScript(Index : Integer) : TScript;
@@ -138,7 +139,7 @@ type
     procedure Stop(Index : Integer);
     procedure StopByHandle(Script : TScript);
     procedure StopAll(StopSysScripts : Boolean);
-    procedure SwitchBot(ScriptName : String; StopBotScripts : Boolean);
+    procedure SwitchBot(ScriptName, BotName : String; StopBotScripts : Boolean);
     procedure ProgramEvent(EventName, MatchText : string; Exclusive : Boolean);
     function TextOutEvent(Text : string; StartScript : TScript) : Boolean;
     procedure TextEvent(Text : string; ForceTrigger : Boolean);
@@ -484,17 +485,20 @@ begin
   end;
 end;
 
-procedure TModInterpreter.SwitchBot(ScriptName : String; StopBotScripts : Boolean);
+procedure TModInterpreter.SwitchBot(ScriptName, BotName : String; StopBotScripts : Boolean);
 var
    I : Integer;
-   IniFile     : TIniFile;
+   IniFile, INI : TIniFile;
    Script,
    BotScript,
-   Section     : String;
+   Section      : String;
    SectionList,
-   ScriptList  : TStringList;
+   ScriptList   : TStringList;
+   FileName  : String;
+   FileData  : TStringList;
 begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+  INI := TINIFile.Create(FProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
   ScriptList := TStringList.Create;
 
   if (ScriptName <> '') then
@@ -517,24 +521,12 @@ begin
 
     end;
 
-    // Load the selected bot files(S)
-    try
-     ExtractStrings([','], [], PChar(ScriptName), ScriptList);
-     for script in ScriptList do
-     begin
-       if (pos('scripts\', LowerCase(script)) > 0) then
-         Load(script, FALSE)
-       else
-         Load('scripts\' + script, FALSE);
-     end;
-     
      FActiveBotScript := StringReplace(ScriptName, FProgramDir + '\scripts\', '', [rfReplaceAll]);
      FActiveBot := '';
      FActiveBotNameVar := '';
-
+     FActiveCommsVar := '';
 
       // MB - Get the activescript name from the ini file.
-      begin
       try
         SectionList := TStringList.Create;
        try
@@ -546,16 +538,55 @@ begin
             begin
               FActiveBot := IniFile.ReadString(Section, 'Name', '');
               FActiveBotNameVar := IniFile.ReadString(Section, 'NameVar', '');
+              FActiveCommsVar := IniFile.ReadString(Section, 'CommsVar', '');
             end;
           end;
         finally
           SectionList.Free;
         end;
       finally
-      IniFile.Free;
+        IniFile.Free;
       end;
-    end
 
+
+    // Write the bot name if specified
+    if (Length(FActiveBotNameVar) > 0) and (BotName <> '') then
+      if Pos('file:', LowerCase(FActiveBotNameVar)) = 0 then
+        try
+          INI.WriteString('Variables', FActiveBotNameVar, BotName);
+        finally
+          INI.Free;
+        end
+      else
+      begin
+        INI.WriteString('Variables', FActiveCommsVar, BotName);
+
+        FileName := StringReplace(FActiveBotNameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
+        FileName := StringReplace(FileName, '{GAME}', StringReplace(StripFileExtension(TWXDatabase.DatabaseName),'data\', '', [rfReplaceAll, rfIgnoreCase]), [rfReplaceAll, rfIgnoreCase]);
+
+        fileData := TStringList.Create;
+        fileData.add(BotName);
+        fileData.add('');
+        try
+          mkDir(TWXGUI.ProgramDir + '\' + ExtractFilePath(FileName));
+          fileData.SaveToFile(TWXGUI.ProgramDir + '\' + FileName);
+        finally
+          fileData.Free;
+        end;
+      end;
+
+
+
+    // Load the selected bot files(S)
+    try
+    ExtractStrings([','], [], PChar(ScriptName), ScriptList);
+    for script in ScriptList do
+    begin
+      if (pos('scripts\', LowerCase(script)) > 0) then
+        Load(script, FALSE)
+      else
+        Load('scripts\' + script, FALSE);
+      end;
     finally
       ScriptList.free();
     end;

@@ -512,7 +512,7 @@ begin
    if (Pos('bot', LowerCase(ExtractFileName(Filename))) > 0) and
       (Pos('switchbot', LowerCase(ExtractFileName(Filename))) = 0)
    then
-     TWXInterpreter.SwitchBot(Filename, True)
+     TWXInterpreter.SwitchBot(Filename, '', True)
    else
      TWXInterpreter.Load(Filename, False);
    end;
@@ -1174,7 +1174,7 @@ procedure TfrmMain.OnBotMenuItemClick(Sender: TObject);
 begin
   // MB - Load the new bot. Load has bot detection and
   //      will close all other scripts automatically.
-  TWXInterpreter.SwitchBot(TQuickMenuItem(Sender).ScriptName, True);
+  TWXInterpreter.SwitchBot(TQuickMenuItem(Sender).ScriptName, '', True);
 end;
 
 procedure TfrmMain.OnQuickMenuItemClick(Sender: TObject);
