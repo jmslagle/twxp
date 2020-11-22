@@ -319,7 +319,7 @@ begin
       if (searchDir.attr and faDirectory) = faDirectory then
       begin
         // Exclude undesired directories
-        if (pos(Lowercase(searchDir.Name),'.,..,include,mombot,mombot3,quantum,zedbot') = 0) then
+        if (pos(Lowercase(searchDir.Name),'.,..,include,mombot,mombot3,Mombot4p,qubot,zedbot') = 0) then
         begin
           if findfirst(FProgramDir + '\scripts\' + searchDir.Name + '\*', faAnyFile, searchFile) = 0 then
           repeat
@@ -386,7 +386,7 @@ begin
       if (searchDir.attr and faDirectory) = faDirectory then
       begin
         // Exclude undesired directories
-        if (pos(Lowercase(searchDir.Name),'.,..,include,mombot,mombot3,quantum,zedbot') = 0) then
+        if (pos(Lowercase(searchDir.Name),'.,..,include,mombot,mombot3,mombot4p,qubot,zedbot') = 0) then
         begin
           if findfirst(FProgramDir + '\scripts\' + searchDir.Name + '\*', faAnyFile, searchFile) = 0 then
           repeat
@@ -1000,7 +1000,7 @@ begin
   begin
     try
       Update := IniFile.ReadString('TWX Proxy', 'Upgrade', '---');
-      if (Pos(Update, Result) = 0) then
+      if (Pos(Update, Result) = 0) and (Pos('2814.2814', Result) = 0) then
       begin
         IniFile.WriteString('TWX Proxy', 'UpdateAvailable', 'True');
         miUpdateNow.Visible := True;

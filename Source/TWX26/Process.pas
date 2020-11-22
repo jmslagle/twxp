@@ -1333,7 +1333,7 @@ begin
     else
       FPortSectorIndex := FCurrentSectorIndex;
 
-    FCurrentSector := TWXDatabase.LoadSector(FPortSectorIndex);
+      FCurrentSector := TWXDatabase.LoadSector(FPortSectorIndex);
   end
   else if (Copy(Line, 27, 16) = 'Relative Density') then
   begin

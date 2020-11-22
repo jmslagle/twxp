@@ -115,6 +115,7 @@ type
     FActiveBotScript,
     FActiveBotNameVar,
     FActiveCommsVar,
+    FActiveDisableLogin,
     FProgramDir: string;
 
     function GetScript(Index : Integer) : TScript;
@@ -125,6 +126,7 @@ type
     procedure OntmrTimeTimer(Sender: TObject);
     function GetActiveBotDir : String;
     function GetActiveBotName : String;
+    function GetActiveDisableLogin : Boolean;
   protected
     { ITWXGlobals }
     function GetProgramDir: string;
@@ -158,6 +160,7 @@ type
     property ActiveBotDir : string read GetActiveBotDir;
     property ActiveBotScript : string read FActiveBotScript;
     property ActiveBotName   : string read GetActiveBotName;
+    property ActiveDisableLogin   : boolean read GetActiveDisableLogin;
     property ScriptMenu : TMenuItem read FScriptMenu write FScriptMenu;
     property ScriptRef : TScriptRef read FScriptRef;
     property ProgramDir: string read GetProgramDir;
@@ -539,6 +542,7 @@ begin
               FActiveBot := IniFile.ReadString(Section, 'Name', '');
               FActiveBotNameVar := IniFile.ReadString(Section, 'NameVar', '');
               FActiveCommsVar := IniFile.ReadString(Section, 'CommsVar', '');
+              FActiveDisableLogin := IniFile.ReadString(Section, 'DisableLogin', '');
             end;
           end;
         finally
@@ -559,7 +563,8 @@ begin
         end
       else
       begin
-        INI.WriteString('Variables', FActiveCommsVar, BotName);
+        if (Length(FActiveCommsVar) > 0) then
+          INI.WriteString('Variables', FActiveCommsVar, BotName);
 
         FileName := StringReplace(FActiveBotNameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
         FileName := StringReplace(FileName, '{GAME}', StringReplace(StripFileExtension(TWXDatabase.DatabaseName),'data\', '', [rfReplaceAll, rfIgnoreCase]), [rfReplaceAll, rfIgnoreCase]);
@@ -630,6 +635,11 @@ begin
     result := '';
 
   INI.Free;
+end;
+
+function TModInterpreter.GetActiveDisableLogin() : Boolean;
+begin
+  result := lowercase(FActiveDisableLogin) = 'true';
 end;
 
 

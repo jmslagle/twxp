@@ -1177,7 +1177,7 @@ begin
   // var = 1 if <value1> = <value2> else var = 0
 
   // MB - Only do a numeric comparision if both arguments are numeric
-  if (Params[1].IsNumeric and Params[2].IsNumeric) then
+  if SetPrecision <> 0 then
   begin
     try
       // The difference must be within MaxFloatVariance to be considered equal
@@ -1185,7 +1185,7 @@ begin
       Params[0].SetBool(Bool);
     except on E: EScriptError do
       // Float comparison failed,
-      Params[0].SetBool(False);
+      Params[0].SetBool(AnsiSameStr(Params[1].Value, Params[2].Value));
     end;
   end
   else
@@ -2424,6 +2424,7 @@ begin
         begin
           BotScript  := IniFile.ReadString(Section, 'Script', '');
 
+          ScriptList.Clear();
           ExtractStrings([','], [], PChar(BotScript), ScriptList);
           if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptList[0]) then
           begin
@@ -2508,10 +2509,10 @@ begin
             if (FileExists(TWXGUI.ProgramDir + '\' + FileName)) then
             begin
               try
+                fileData.Clear();
                 fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
                 BotName := '~f{~c' + fileData[0] + '~f}';
               finally
-                fileData.Free;
               end;
             end;
           end;
@@ -2532,7 +2533,7 @@ begin
         end;
       end;
   finally
-
+    fileData.Free;
   end;
 
   TVarParam(Params[0]).SetArrayFromStrings(BotList);
@@ -4473,10 +4474,11 @@ begin
           BotList := BotList + Format('  %-8s %-6s %s', [BotName, Alias, Name]);
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
              BotList := BotList +  ' <ACTIVE>';
-          end;
+
           BotList := BotList +  chr(13);
         end;
       end;
+    end;
   finally
   end;
 
