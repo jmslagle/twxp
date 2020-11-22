@@ -799,18 +799,26 @@ end;
 
 procedure TfrmSetup.btnResetClick(Sender: TObject);
 var
-  Result   : Integer;
-  S, DB    : string;
-  Head     : PDataHeader;
-  HFileRes : HFILE;
+  I, Result : Integer;
+  S, DB     : string;
+  Head      : PDataHeader;
+  HFileRes  : HFILE;
 begin
   if (cbGames.ItemIndex > -1) then
   begin
     Result := MessageDlg('Are you sure you want to reset this database?', mtWarning, [mbYes, mbNo], 0);
-
     if (Result = mrNo) then
       Exit;
 
+    // Stop all running scrits
+    while (I < TWXInterpreter.Count) do
+      TWXInterpreter.Stop(I);
+
+    // Disconnect from server
+    if TWXGUI.Connected then
+      TWXClient.Disconnect;
+
+    // Create a new DB heaader, and set StarDock locaaaaation to unknown
     Head := @(TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).DataHeader);
     Head.StarDock := 65535;
 

@@ -115,7 +115,7 @@ type
     FActiveBotScript,
     FActiveBotNameVar,
     FActiveCommsVar,
-    FActiveDisableLogin,
+    FActiveLoginScript,
     FProgramDir: string;
 
     function GetScript(Index : Integer) : TScript;
@@ -126,7 +126,8 @@ type
     procedure OntmrTimeTimer(Sender: TObject);
     function GetActiveBotDir : String;
     function GetActiveBotName : String;
-    function GetActiveDisableLogin : Boolean;
+    function GetActiveLoginDisabled : Boolean;
+    function GetActiveLoginScript : String;
   protected
     { ITWXGlobals }
     function GetProgramDir: string;
@@ -160,7 +161,8 @@ type
     property ActiveBotDir : string read GetActiveBotDir;
     property ActiveBotScript : string read FActiveBotScript;
     property ActiveBotName   : string read GetActiveBotName;
-    property ActiveDisableLogin   : boolean read GetActiveDisableLogin;
+    property ActiveLoginDisabled   : boolean read GetActiveLoginDisabled;
+    property ActiveLoginScript   : string read GetActiveLoginScript;
     property ScriptMenu : TMenuItem read FScriptMenu write FScriptMenu;
     property ScriptRef : TScriptRef read FScriptRef;
     property ProgramDir: string read GetProgramDir;
@@ -542,7 +544,7 @@ begin
               FActiveBot := IniFile.ReadString(Section, 'Name', '');
               FActiveBotNameVar := IniFile.ReadString(Section, 'NameVar', '');
               FActiveCommsVar := IniFile.ReadString(Section, 'CommsVar', '');
-              FActiveDisableLogin := IniFile.ReadString(Section, 'DisableLogin', '');
+              FActiveLoginScript := IniFile.ReadString(Section, 'LoginScript', '');
             end;
           end;
         finally
@@ -637,9 +639,17 @@ begin
   INI.Free;
 end;
 
-function TModInterpreter.GetActiveDisableLogin() : Boolean;
+function TModInterpreter.GetActiveLoginDisabled() : Boolean;
 begin
-  result := lowercase(FActiveDisableLogin) = 'true';
+  result := lowercase(FActiveLoginScript) = 'disabled';
+end;
+
+function TModInterpreter.GetActiveLoginScript() : String;
+begin
+  if lowercase(FActiveLoginScript) = 'disabled' then
+    result := ''
+  else
+    result := FActiveLoginScript;
 end;
 
 

@@ -1149,10 +1149,13 @@ begin
   if (TWXDatabase.DBHeader.UseLogin) then
   begin
     // MB - disable login if specified in TWXP.CFG for active bot, unless running Vid's Login
-    if (TWXInterpreter.ActiveDisableLogin = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
+    if (TWXInterpreter.ActiveLoginDisabled = False) or (Pos('0_', TWXDatabase.DBHeader.LoginScript) > 0)  then
     begin
       TWXInterpreter.StopAll(FALSE);
-      TWXInterpreter.Load(FetchScript(TWXGUI.ProgramDir + '\scripts\' + TWXDatabase.DBHeader.LoginScript, FALSE), TRUE);
+      if (Length(TWXInterpreter.ActiveLoginScript) > 0) and (Pos('0_', TWXDatabase.DBHeader.LoginScript) = 0) then
+        TWXInterpreter.Load(FetchScript(TWXGUI.ProgramDir + '\scripts\' + TWXInterpreter.ActiveLoginScript, FALSE), TRUE)
+      else
+        TWXInterpreter.Load(FetchScript(TWXGUI.ProgramDir + '\scripts\' + TWXDatabase.DBHeader.LoginScript, FALSE), TRUE);
     end;
   end;
 end;
@@ -1168,7 +1171,7 @@ begin
     if (Reconnect) and not (FUserDisconnect) then
     begin
       // MB - disable reconnect if specified in TWXP.CFG for active bot, unless running Vid's Login
-      if (TWXInterpreter.ActiveDisableLogin = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
+      if (TWXInterpreter.ActiveLoginDisabled = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
       begin
         if FReconnectDelay < 3 then
           FReconnectDelay := 3;
@@ -1194,7 +1197,7 @@ begin
     if (Reconnect) and not (FUserDisconnect) then
     begin
       // MB - disable reconnect if specified in TWXP.CFG for active bot, unless running Vid's Login
-      if (TWXInterpreter.ActiveDisableLogin = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
+      if (TWXInterpreter.ActiveLoginDisabled = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
       begin
         TWXServer.Broadcast( endl + endl + ANSI_12 + 'Connection lost.' + ANSI_13 + '(' + ANSI_11 + DateTimeToStr(Now)+ ANSI_13 + ')' + endl);
         TWXServer.Broadcast( ANSI_10 + 'Reconnecting in ' + ANSI_11 + '3' + ANSI_10 + ' seconds...');
@@ -1262,7 +1265,7 @@ begin
         FReconnectDelay := 3;
 
       // MB - disable reconnect if specified in TWXP.CFG for active bot, unless running Vid's Login
-      if (TWXInterpreter.ActiveDisableLogin = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
+      if (TWXInterpreter.ActiveLoginDisabled = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
       begin
         TWXServer.Broadcast( ANSI_12 +'Failed to Connect. ' + ANSI_10 + 'Reconnecting in ' + ANSI_11 + IntToStr(FReconnectdelay) + ANSI_10 + ' seconds...');
         tmrReconnect.Enabled := TRUE;
