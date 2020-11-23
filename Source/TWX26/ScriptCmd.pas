@@ -1962,17 +1962,24 @@ end;
 {$HINTS OFF}
 function CmdSetVar(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
+  I : Integer;
   F : Extended;
+  ParamText : String;
 begin
   // CMD: setVar var <value>
 
-  if Params[1].IsNumeric = TRUE then
+  if (Params[1].IsNumeric = TRUE) and (Length(Params) = 2) then
     //Params[0].DecValue := Params[1].DecValue
     //UpdateParam(Params[0], Params[1].DecValue, TScript(Script).DecimalPrecision) // this way Precision is captured
     UpdateParam(Params[0], Params[1].DecValue, Params[1].SigDigits)
   else
-    Params[0].Value := Params[1].Value;
-  
+    // MB - Now you can string together parameters like echo without concatting.
+    for I := 1 to Length(Params) - 1 do
+    begin
+      ParamText := ParamText + Params[I].Value;
+      Params[0].Value := ParamText;
+    end;
+
   Result := caNone;
 end;
 {$HINTS ON}
@@ -4763,7 +4770,7 @@ begin
     AddCommand('SETTEXTLINETRIGGER', 2, 3, CmdSetTextLineTrigger, [pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETTEXTOUTTRIGGER', 2, 3, CmdSetTextOutTrigger, [pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETTEXTTRIGGER', 2, 3, CmdSetTextTrigger, [pkValue, pkValue, pkValue], pkValue);
-    AddCommand('SETVAR', 2, 2, CmdSetVar, [pkVar, pkValue], pkValue);
+    AddCommand('SETVAR', 2, -1, CmdSetVar, [pkVar, pkValue], pkValue);
     AddCommand('SETWINDOWCONTENTS', 2, 2, CmdSetWindowContents, [pkValue, pkValue], pkValue);
     AddCommand('SOUND', 1, 1, CmdSound, [pkValue], pkValue);
     AddCommand('STOP', 1, 1, CmdStop, [pkValue], pkValue);

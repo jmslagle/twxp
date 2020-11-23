@@ -1668,7 +1668,7 @@ begin
                 if Last = '-' then
                   ParamLine.Append('SUBTRACT');
                 if Last = '&' then
-                  ParamLine.Append('MERGETEXT');
+                  ParamLine.Append('SETVAR');
 
                 ParamList.Clear;
                 ExtractStrings([' '], [], PChar(LineText), ParamList);
