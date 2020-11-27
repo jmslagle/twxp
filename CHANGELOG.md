@@ -14,6 +14,7 @@ Changes in 2.06.06
 + Added Stop All Scripts to popup menu and stopAll command
 + Added Reset Database Feature - For rebangs or script testing
 + Added Streaming Mode feature - Hides numbers from your stream
++ Added Text to CP437 conversion to Echo for drawing menus.
 + Enhance Delete Database Feature - Optionally deletes script created data
 + Fixed - Issue 46 List index out of bounds - fatal crash
 + Fixed - ClearGlobal is now ClearGlobals as documented (typo)
