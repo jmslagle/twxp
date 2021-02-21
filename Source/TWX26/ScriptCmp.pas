@@ -588,7 +588,8 @@ begin
   begin
     CurLabel := FLabelList[i];
     if (pos(':', Name) = 0) and (CurLabel.Name = Name) then
-      raise EScriptError.Create('Duplicate label found (:' + Name + ')');
+      raise EScriptError.Create('***Duplicate label found (:' + stringReplace(Name,'~','~~',
+                          [rfReplaceAll, rfIgnoreCase]) + ')**');
 
   end;
 
@@ -1650,7 +1651,7 @@ begin
             // mb - handle asignment operators
             if not (InQuote) and (LineText[I] = '=') then
             begin
-              if pos(last,':*/%+-') > 0 then
+              if pos(last,':*/%+-&') > 0 then
               begin
                 ParamLine.Clear;
 
@@ -1666,6 +1667,8 @@ begin
                   ParamLine.Append('ADD');
                 if Last = '-' then
                   ParamLine.Append('SUBTRACT');
+                if Last = '&' then
+                  ParamLine.Append('SETVAR');
 
                 ParamList.Clear;
                 ExtractStrings([' '], [], PChar(LineText), ParamList);

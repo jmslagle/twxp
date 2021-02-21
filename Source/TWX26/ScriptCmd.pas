@@ -1177,7 +1177,7 @@ begin
   // var = 1 if <value1> = <value2> else var = 0
 
   // MB - Only do a numeric comparision if both arguments are numeric
-  if (Params[1].IsNumeric and Params[2].IsNumeric) then
+  if SetPrecision <> 0 then
   begin
     try
       // The difference must be within MaxFloatVariance to be considered equal
@@ -1185,7 +1185,7 @@ begin
       Params[0].SetBool(Bool);
     except on E: EScriptError do
       // Float comparison failed,
-      Params[0].SetBool(False);
+      Params[0].SetBool(AnsiSameStr(Params[1].Value, Params[2].Value));
     end;
   end
   else
@@ -1429,7 +1429,10 @@ begin
   // CMD: mergeText <value1> <value2> var
   // Concatenate two values and store the result
 
-  Params[2].Value := Params[0].Value + Params[1].Value;
+  if Length(Params) = 3 then
+    Params[2].Value := Params[0].Value + Params[1].Value
+  else
+    Params[0].Value := Params[0].Value + Params[1].Value;
 
   Result := caNone;
 end;
@@ -1959,17 +1962,24 @@ end;
 {$HINTS OFF}
 function CmdSetVar(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
+  I : Integer;
   F : Extended;
+  ParamText : String;
 begin
   // CMD: setVar var <value>
 
-  if Params[1].IsNumeric = TRUE then
+  if (Params[1].IsNumeric = TRUE) and (Length(Params) = 2) then
     //Params[0].DecValue := Params[1].DecValue
     //UpdateParam(Params[0], Params[1].DecValue, TScript(Script).DecimalPrecision) // this way Precision is captured
     UpdateParam(Params[0], Params[1].DecValue, Params[1].SigDigits)
   else
-    Params[0].Value := Params[1].Value;
-  
+    // MB - Now you can string together parameters like echo without concatting.
+    for I := 1 to Length(Params) - 1 do
+    begin
+      ParamText := ParamText + Params[I].Value;
+      Params[0].Value := ParamText;
+    end;
+
   Result := caNone;
 end;
 {$HINTS ON}
@@ -2380,7 +2390,7 @@ begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
   NextBot := '';
 
-  if (Length(Params) = 1) and (Params[0].Value <> '') and (Params[0].Value <> '0') then
+  if (Length(Params) > 0) and (Params[0].Value <> '') and (Params[0].Value <> '0') then
   begin
   try
     SectionList := TStringList.Create;
@@ -2421,6 +2431,7 @@ begin
         begin
           BotScript  := IniFile.ReadString(Section, 'Script', '');
 
+          ScriptList.Clear();
           ExtractStrings([','], [], PChar(BotScript), ScriptList);
           if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptList[0]) then
           begin
@@ -2452,7 +2463,12 @@ begin
 
   // Load the selected bot
   if (NextBot <> '') then
-    TWXInterpreter.SwitchBot(NextBot, FALSE);
+    if (Length(Params) > 1) and (Params[1].Value <> '0') then
+      TWXInterpreter.SwitchBot(NextBot, Params[1].Value, FALSE)
+    else
+      TWXInterpreter.SwitchBot(NextBot, '', FALSE);
+
+
 
   Result := caNone;
 end;
@@ -2500,10 +2516,10 @@ begin
             if (FileExists(TWXGUI.ProgramDir + '\' + FileName)) then
             begin
               try
+                fileData.Clear();
                 fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
                 BotName := '~f{~c' + fileData[0] + '~f}';
               finally
-                fileData.Free;
               end;
             end;
           end;
@@ -2524,7 +2540,7 @@ begin
         end;
       end;
   finally
-
+    fileData.Free;
   end;
 
   TVarParam(Params[0]).SetArrayFromStrings(BotList);
@@ -4403,6 +4419,11 @@ Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s
   SCCurrentScanType(Indexes)]);
 end;
 
+function SCGameData(Indexes : TStringArray) : string;
+begin
+  Result := StripFileExtension(TWXDatabase.DatabaseName) + '\';
+end;
+
 function SCBotList(Indexes : TStringArray) : string;
 var
    IniFile, INI : TIniFile;
@@ -4460,10 +4481,11 @@ begin
           BotList := BotList + Format('  %-8s %-6s %s', [BotName, Alias, Name]);
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
              BotList := BotList +  ' <ACTIVE>';
-          end;
+
           BotList := BotList +  chr(13);
         end;
       end;
+    end;
   finally
   end;
 
@@ -4650,6 +4672,7 @@ begin
     AddSysConstant('CURRENTQUICKSTATS',SCCurrentQuickStats);
     AddSysConstant('CURRENTQS',SCCurrentQS);
     AddSysConstant('CURRENTQSTAT',SCCurrentQSTAT);
+    AddSysConstant('GAMEDATA',SCGameData);
     AddSysConstant('BOTLIST',SCBotList);
     AddSysConstant('ACTIVEBOT',SCActiveBot);
     AddSysConstant('ACTIVEBOTDIR',SCActiveBotDir);
@@ -4717,7 +4740,7 @@ begin
     AddCommand('LOADVAR', 1, 1, CmdLoadVar, [pkVar], pkValue);
     AddCommand('LOGGING', 1, 1, CmdLogging, [pkValue], pkValue);
     AddCommand('LOWERCASE', 1, 1, CmdLowerCase, [pkVar], pkValue);
-    AddCommand('MERGETEXT', 3, 3, CmdMergeText, [pkValue, pkValue, pkVar], pkValue);
+    AddCommand('MERGETEXT', 2, 3, CmdMergeText, [pkValue, pkValue, pkVar], pkValue);
     AddCommand('MULTIPLY', 2, 2, CmdMultiply, [pkVar, pkValue], pkValue);
     AddCommand('OPENMENU', 1, 2, CmdOpenMenu, [pkValue, pkValue], pkValue);
     AddCommand('OR', 2, 2, CmdOr, [pkVar, pkValue], pkValue);
@@ -4747,7 +4770,7 @@ begin
     AddCommand('SETTEXTLINETRIGGER', 2, 3, CmdSetTextLineTrigger, [pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETTEXTOUTTRIGGER', 2, 3, CmdSetTextOutTrigger, [pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETTEXTTRIGGER', 2, 3, CmdSetTextTrigger, [pkValue, pkValue, pkValue], pkValue);
-    AddCommand('SETVAR', 2, 2, CmdSetVar, [pkVar, pkValue], pkValue);
+    AddCommand('SETVAR', 2, -1, CmdSetVar, [pkVar, pkValue], pkValue);
     AddCommand('SETWINDOWCONTENTS', 2, 2, CmdSetWindowContents, [pkValue, pkValue], pkValue);
     AddCommand('SOUND', 1, 1, CmdSound, [pkValue], pkValue);
     AddCommand('STOP', 1, 1, CmdStop, [pkValue], pkValue);
@@ -4805,7 +4828,7 @@ begin
     AddCommand('LOADGLOBAL', 1, 1, CmdLoadGlobal, [pkValue], pkValue);
     AddCommand('CLEARGLOBALS', 0, 0, CmdClearGlobals, [], pkValue);
 
-    AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
+    AddCommand('SWITCHBOT', 0, 2, CmdSwitchBot, [pkValue], pkValue);
 
     AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
 

@@ -1036,7 +1036,7 @@ procedure TModMenu.ApplySetup;
   end;
 begin
   // set items in setup menu to match this program setup
-  GetMenuByName('TWX_LISTENPORT').Value := IntToStr(TWXServer.ListenPort);
+  //GetMenuByName('TWX_LISTENPORT').Value := IntToStr(TWXDatabase.ListenPort);
   GetMenuByName('TWX_BUBBLESIZE').Value := IntToStr(TWXBubble.MaxBubbleSize);
   GetMenuByName('TWX_RECONNECT').Value := BoolToStr(TWXClient.Reconnect);
   GetMenuByName('TWX_LOG').Value := BoolToStr(TWXLog.LogEnabled);
@@ -1064,6 +1064,11 @@ begin
 
   if (Result = nil) then
     raise EMenuException.Create('Cannot find menu ''' + MenuName + '''');
+
+
+  // MB - this is no longer a setting, but stored in database header
+  if (MenuName = 'TWX_LISTENPORT') then
+    Result.Value := IntToStr(TWXDatabase.ListenPort);
 end;
 
 

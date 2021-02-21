@@ -176,7 +176,7 @@ begin
   // TODO: Set TWXProxy as the devault Telnet application in the registry.
 
   PersistenceManager := TPersistenceManager.Create(Application);
-  PersistenceManager.OutputFile := 'TWXS.dat';
+  PersistenceManager.OutputFile := 'TWX26.dat';
 
   // call object constructors
   for ModuleType := Low(TModuleType) to High(TModuleType) do
@@ -361,17 +361,22 @@ begin
 
     try
       IniFile.WriteString('TWX Proxy', 'Upgrade', '2020.06.11');
-      IniFile.WriteString('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)), IntToStr(GetCurrentProcessId()));
+      if TWXGUI.DatabaseName <> '' then
+        IniFile.WriteString('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)), IntToStr(GetCurrentProcessId()));
 
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
       IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
       IniFile.WriteString('Bot:Mom', 'NameVar', '$BOT~BOT_NAME');
+      IniFile.WriteString('Bot:Mom', 'CommsVar', '$SWITCHBOARD~BOT_NAME');
+      IniFile.WriteString('Bot:Mom', 'LoginScript', 'Disabled');
       IniFile.WriteString('Bot:1045', 'Name', 'Legacy Mombot 3.1045');
       IniFile.WriteString('Bot:1045', 'Script', 'Mombot3\__mom_bot3_1045.cts');
       IniFile.WriteString('Bot:1045', 'NameVar', 'FILE:_MOM_{GAME}.bot');
+      IniFile.WriteString('Bot:1045', 'LoginScript', 'Disabled');
       IniFile.WriteString('Bot:Zed', 'Name', 'Zed Bot Unleashed');
-      IniFile.WriteString('Bot:Zed', 'Script', 'z-authorise.cts,z-bot.cts');
+      IniFile.WriteString('Bot:Zed', 'Script', 'z-bot.ts');
       IniFile.WriteString('Bot:Zed', 'NameVar', '$Z_BOTNAME');
+      IniFile.WriteString('Bot:Zed', 'LoginScript', 'z-login.cts');
 
       IniFile.WriteString('QuickLoad', '1_', 'Xide Pack1');
       IniFile.WriteString('QuickLoad', '2_', 'Xide Pack2');
@@ -400,13 +405,19 @@ begin
 
     try
       IniFile.WriteString('TWX Proxy', 'Upgrade', '2020.06.11');
-      IniFile.WriteString('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)), IntToStr(GetCurrentProcessId()));
+      if TWXGUI.DatabaseName <> '' then
+        IniFile.WriteString('Instances', StripFileExtension(ShortFilename(TWXGUI.DatabaseName)), IntToStr(GetCurrentProcessId()));
 
       IniFile.WriteString('Bot:Mom', 'Name', 'Mind Over Matter Bot');
       IniFile.WriteString('Bot:Mom', 'Script', 'Mombot4p\mombot.cts');
-      IniFile.WriteString('Bot:Mom', 'NameVar', '$BOT~BOT_NAME');
+      IniFile.WriteString('Bot:Mom', 'NameVar', 'FILE:scripts\Mombot4p\games\{GAME}\bot.cfg');
+      IniFile.WriteString('Bot:Mom', 'CommsVar', '$SWITCHBOARD~BOT_NAME');
+      IniFile.WriteString('Bot:Mom', 'LoginScript', 'Disabled');
       IniFile.WriteString('Bot:1045', 'NameVar', 'FILE:_MOM_{GAME}.bot');
+      IniFile.WriteString('Bot:1045', 'LoginScript', 'Disabled');
       IniFile.WriteString('Bot:Zed', 'NameVar', '$Z_BOTNAME');
+      IniFile.WriteString('Bot:Zed', 'Script', 'z-bot.ts');
+      IniFile.WriteString('Bot:Zed', 'LoginScript', 'z-login.cts');
     finally
       IniFile.Free;
     end;
@@ -472,7 +483,7 @@ begin
     if (Pos('bot', LowerCase(ExtractFileName(Filename))) > 0) and
        (Pos('switchbot', LowerCase(ExtractFileName(Filename))) = 0)
     then
-      TWXInterpreter.SwitchBot(Filename, True)
+      TWXInterpreter.SwitchBot(Filename, '', True)
     else
       TWXInterpreter.Load(Filename, False)
   end;

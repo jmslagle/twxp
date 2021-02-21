@@ -34,8 +34,8 @@ uses
 
 const
   ProgramVersion = '2.6.06';
-  ReleaseNumber = 1;
-  ReleaseVersion = 'Beta';
+  ReleaseNumber = 4;
+  ReleaseVersion = 'Alpha';
   SetupFile = 'TWXS.dat';
 
   endl = #13 + #10;

@@ -292,21 +292,17 @@ begin
   // a large packet or still be waiting for the user.
 
   // MB - Added TWGS Version detection
-  if (Copy(Line, 1, 14) = 'TradeWars Game') then
+  if TWXClient.BlockExtended and (Copy(Line, 1, 14) = 'TradeWars Game') then
   begin
     FTWGSType := 2;
     FTWGSVer := '2.20b';
     FTW2002Ver := '3.34';
 
     // MB - Sending event to Mombot, since we blocked # initially.
-    if TWXClient.BlockExtended then
-    begin
-      TWXClient.BlockExtended := FALSE;
-      //Sleep(500);
-      TWXInterpreter.TextEvent('Selection (? for menu):', FALSE);
-    end;
+    TWXClient.BlockExtended := FALSE;
+    TWXInterpreter.TextEvent('Selection (? for menu):', FALSE);
   end
-  else if (Copy(Line, 1, 15) = 'Trade Wars 2002') then
+  else if TWXClient.BlockExtended and (Copy(Line, 1, 20) = 'Trade Wars 2002 Game') then
   begin
 //Trade Wars 2002 Game Server v1.03                          Copyright (C) 1998
 //www.tradewars.com                                   Epic Interactive Strategy
@@ -315,12 +311,8 @@ begin
     FTW2002Ver := '3.13';
 
     // MB - Sending event to Mombot, since we blocked # initially.
-    if TWXClient.BlockExtended then
-    begin
-      TWXClient.BlockExtended := FALSE;
-      //Sleep(500);
-      TWXInterpreter.TextEvent('Selection (? for menu):', FALSE);
-    end;
+    TWXClient.BlockExtended := FALSE;
+    TWXInterpreter.TextEvent('Selection (? for menu):', FALSE);
   end
   else if (Copy(Line, 1, 12) = 'Command [TL=') then
   begin
@@ -1341,7 +1333,7 @@ begin
     else
       FPortSectorIndex := FCurrentSectorIndex;
 
-    FCurrentSector := TWXDatabase.LoadSector(FPortSectorIndex);
+      FCurrentSector := TWXDatabase.LoadSector(FPortSectorIndex);
   end
   else if (Copy(Line, 27, 16) = 'Relative Density') then
   begin
