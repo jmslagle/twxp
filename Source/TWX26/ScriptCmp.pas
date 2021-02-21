@@ -146,7 +146,6 @@ type
     function ConvertOps(const Line : string) : string;
     function ConvertConditions(const Line : string) : string;
     function IsOperator(C : Char) : Boolean;
-    procedure CompileFromStrings(ScriptText : TStringList; ScriptName : string);
     procedure IncludeFile(Filename : string);
 
   public
@@ -154,6 +153,7 @@ type
     destructor Destroy; override;
 
     procedure CompileFromFile(const Filename, DescFile : string);
+    procedure CompileFromStrings(ScriptText : TStringList; ScriptName : string);
     procedure AddParam(Param : TCmdParam);
     procedure LoadFromFile(const Filename : string);
     procedure WriteToFile(const Filename : string);
@@ -824,7 +824,8 @@ begin
     if (Length(Value) < 2) then
       raise EScriptError.Create('Variable name expected');
 
-    if (ScriptID > 0) and (Pos('~', Value) = 0) then
+    // MB - do not extend var names for Library Commands  
+    if (ScriptID > 0) and (Pos('~', Value) = 0) and (IncludeScriptList[ScriptID] <> '') then
       Value := '$' + IncludeScriptList[ScriptID] + '~' + Copy(Value, 2, Length(Value));
 
     if (ParamKind <> pkValue) and (ParamKind <> pkVar) then
@@ -1231,6 +1232,7 @@ var
   LabelName,
   CmdCode   : string;
   ConStruct : ^TConditionStruct;
+  CmdLine   : array of string;
 //  F : TextFile; // EP
 //  ParamLineString : String; // EP
 begin
@@ -1440,6 +1442,19 @@ begin
           RecurseCmd(['KILLTRIGGER', 'WAITON' + IntToStr(WaitOnCount) + 'B'], Line, ScriptID);
       end;
     end
+    // MB - Library command injection
+    else if (ParamLine[0] = 'SYNC') or
+            (ParamLine[0] = 'LOADGLOBALS') or
+            (ParamLine[0] = 'SENDMSG') then
+      begin
+        SetLength(CmdLine, ParamLine.Count + 1);
+        CmdLine[0] := 'LIBCMD';
+
+        for I := 1 to ParamLine.Count do
+          CmdLine[I] := ParamLine[I - 1];
+
+        RecurseCmd(CmdLine, Line, ScriptID);
+      end
     else
     begin
       // identify script command
@@ -1668,7 +1683,7 @@ begin
                 if Last = '-' then
                   ParamLine.Append('SUBTRACT');
                 if Last = '&' then
-                  ParamLine.Append('SETVAR');
+                  ParamLine.Append('CONCAT');
 
                 ParamList.Clear;
                 ExtractStrings([' '], [], PChar(LineText), ParamList);

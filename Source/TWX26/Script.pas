@@ -116,16 +116,20 @@ type
     FActiveBotNameVar,
     FActiveCommsVar,
     FActiveLoginScript,
+    FActiveBotTag,
     FProgramDir: string;
+    FActiveBotTagLength : Integer;
 
     function GetScript(Index : Integer) : TScript;
-    function GetCount : Integer;
+    function GetCount : Integer;              
     function GetAutoRun: TStringList;
     function GetAutoRunText: string;
     procedure SetAutoRunText(Value: string);
     procedure OntmrTimeTimer(Sender: TObject);
     function GetActiveBotDir : String;
     function GetActiveBotName : String;
+    function GetActiveBotTag : String;
+    function GetActiveBotTagLength : Integer;
     function GetActiveLoginDisabled : Boolean;
     function GetActiveLoginScript : String;
   protected
@@ -161,6 +165,8 @@ type
     property ActiveBotDir : string read GetActiveBotDir;
     property ActiveBotScript : string read FActiveBotScript;
     property ActiveBotName   : string read GetActiveBotName;
+    property ActiveBotTag   : string read GetActiveBotTag;
+    property ActiveBotTagLength   : integer read GetActiveBotTagLength;
     property ActiveLoginDisabled   : boolean read GetActiveLoginDisabled;
     property ActiveLoginScript   : string read GetActiveLoginScript;
     property ScriptMenu : TMenuItem read FScriptMenu write FScriptMenu;
@@ -196,6 +202,8 @@ type
     ExecScriptID       : Integer;
     SubStack           : TStack;
     CmdParams          : array of TCmdParam;
+    LibCmdName         : String;
+    LibCmdLoaded       : TStringList;
 
     function ReadByte(var CodeRef : Pointer) : Byte;
     function ReadChar(var CodeRef : Pointer) : Char;
@@ -204,7 +212,7 @@ type
     function ReadIndexValues(var CodeRef : Pointer; IndexCount : Byte) : TStringArray;
     function SeekVariable(var CodeRef : Pointer) : TVarParam;
     function GetSysConstValue(var CodeRef : Pointer) : string;
-    function ProcessCmd(Cmd : TScriptCmd; var CmdValues : Pointer) : TCmdAction;
+    function ProcessCmd(Cmd : TScriptCmd; var CmdValues : Pointer; Exec : Boolean) : TCmdAction;
     function TriggerExists(Name : string) : Boolean;
     function CheckTriggers(TriggerList : TList; const Text : string; TextOutTrigger, ForceTrigger : Boolean; var Handled : Boolean) : Boolean;
     function CreateTrigger(Name, LabelName, Value : string) : PTrigger;
@@ -251,6 +259,8 @@ type
     procedure AddWindow(Window : TScriptWindow);
     procedure RemoveWindow(Window : TScriptWindow);
     function FindWindow(WindowName : string) : TScriptWindow;
+    procedure CompileLib();
+    procedure GetLibCmd(var ScriptText : TStringList; Command : String);
 
     property System : Boolean read FSystem write FSystem;
     property TriggersActive : Boolean read FTriggersActive write FTriggersActive;
@@ -405,7 +415,7 @@ begin
     except
       on E : Exception do
       begin
-        TWXServer.Broadcast(endl + ANSI_15 + 'Script load error: ' + ANSI_7 + E.Message + endl + endl);
+        TWXServer.Broadcast(endl + ANSI_15 + 'Error loading script "' + Filename + '": ' + ANSI_7 + E.Message + endl);
         Stop(Count - 1);
       end;
     end;
@@ -496,15 +506,21 @@ var
    IniFile, INI : TIniFile;
    Script,
    BotScript,
-   Section      : String;
+   Section,
+   Theme,
+   LastBotName        : String;
    SectionList,
    ScriptList   : TStringList;
-   FileName  : String;
-   FileData  : TStringList;
+   FileName     : String;
+   FileData     : TStringList;
+   Strings      : TStringList;
 begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
   INI := TINIFile.Create(FProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
   ScriptList := TStringList.Create;
+  Strings := TStringList.Create;
+
+  LastBotName := GetActiveBotName();
 
   if (ScriptName <> '') then
   begin
@@ -526,10 +542,12 @@ begin
 
     end;
 
-     FActiveBotScript := StringReplace(ScriptName, FProgramDir + '\scripts\', '', [rfReplaceAll]);
-     FActiveBot := '';
-     FActiveBotNameVar := '';
-     FActiveCommsVar := '';
+      FActiveBotScript := StringReplace(ScriptName, FProgramDir + '\scripts\', '', [rfReplaceAll]);
+      FActiveBot := '';
+      FActiveBotNameVar := '';
+      FActiveCommsVar := '';
+      FActiveBotTagLength := 0;
+      FActiveBotTag := '';
 
       // MB - Get the activescript name from the ini file.
       try
@@ -545,6 +563,17 @@ begin
               FActiveBotNameVar := IniFile.ReadString(Section, 'NameVar', '');
               FActiveCommsVar := IniFile.ReadString(Section, 'CommsVar', '');
               FActiveLoginScript := IniFile.ReadString(Section, 'LoginScript', '');
+              Theme := IniFile.ReadString(Section, 'Theme', '');
+
+              Split(Theme, Strings, '|');
+              if Strings.Count > 1 then
+              Begin
+                FActiveBotTagLength := strtointdef(Strings[0],0);
+                FActiveBotTag := Strings[1];
+                for I := 2 to Strings.Count - 1 do
+                  TWXServer.AddQuickText('~' + inttostr(I-1), Strings[I]);
+              End;
+              Strings.Free
             end;
           end;
         finally
@@ -554,6 +583,9 @@ begin
         IniFile.Free;
       end;
 
+    // If botname is not defined, use the name of the last bot
+    if GetActiveBotName() = '' then
+    BotName := LastBotName;
 
     // Write the bot name if specified
     if (Length(FActiveBotNameVar) > 0) and (BotName <> '') then
@@ -598,6 +630,16 @@ begin
       ScriptList.free();
     end;
   end;
+end;
+
+function TModInterpreter.GetActiveBotTag() : String;
+begin
+  result := FActiveBotTag;
+end;
+
+function TModInterpreter.GetActiveBotTagLength() : Integer;
+begin
+  result := FActiveBotTagLength;
 end;
 
 function TModInterpreter.GetActiveBotDir() : String;
@@ -944,11 +986,19 @@ begin
 end;
 
 procedure TScript.GetFromFile(const Filename : string; Compile : Boolean);
+var
+  Line, Cmd : Integer;
 begin
   if (Compile) then
-    FCmp.CompileFromFile(Filename, '')
+  begin
+    FCmp.CompileFromFile(Filename, '');
+    CompileLib();
+  end
   else
+  begin
     FCmp.LoadFromFile(Filename);
+    CompileLib();
+  end;
 
   CodePos := FCmp.Code; // always start at beginning of script
 end;
@@ -1641,7 +1691,7 @@ begin
   end;
 end;
 
-function TScript.ProcessCmd(Cmd : TScriptCmd; var CmdValues : Pointer) : TCmdAction;
+function TScript.ProcessCmd(Cmd : TScriptCmd; var CmdValues : Pointer; Exec : Boolean) : TCmdAction;
 {
   Note on passing to script commands:
 
@@ -1705,7 +1755,15 @@ begin
         Dec(PLongint(Ptr));
         RealCount := PLongint(Ptr)^; // EP - Preserve actual length of dynamic array
         PLongint(Ptr)^ := ParamCount; // EP - Fake the length
-        Result := Cmd.onCmd(Self, CmdParams);
+
+        if Exec then
+          // MB - Do not execute Cmd when parsing Library Command inclusion.
+          Result := Cmd.onCmd(Self, CmdParams)
+        else
+          // MB - Store the Library Command Name to be loaded when parsing.
+          if Cmd.Name = 'LIBCMD' then
+            LibCmdName := CmdParams[0].Value;
+
         PLongint(Ptr)^ := RealCount; // EP - Set length back to actual length
         Inc(PLongint(Ptr));
         Break;
@@ -1769,7 +1827,7 @@ begin
       // fetch command from code
       Cmd := ReadWord(CodePos);
       // read and execute command
-      CmdAction := ProcessCmd(Cmp.ScriptRef.Cmds[Cmd], CodePos);
+      CmdAction := ProcessCmd(Cmp.ScriptRef.Cmds[Cmd], CodePos, True);
       if (Integer(CodePos) - Integer(Cmp.Code) >= Cmp.CodeSize) and (CmdAction <> caPause) then
         CmdAction := caStop; // reached end of compiled code
     until (CmdAction <> ScriptRef.caNone);
@@ -1845,13 +1903,189 @@ begin
   Result := FALSE;
 end;
 
-
-
 procedure TScript.Gosub(LabelName : String);
 begin
   SubStack.Push(CodePos);
   GotoLabel(LabelName);
 end;
+
+
+procedure TScript.CompileLib();
+var
+  I : Integer;
+  ScriptText : TStringList;
+  ExecScriptID : Integer;
+  Line, Cmd : Word;
+
+begin
+    ScriptText := TStringList.Create;
+    LibCmdLoaded := TStringList.Create;
+
+    // Always load Sync as it is used by other Library Commands.
+    GetLibCmd(ScriptText, 'SYNC');
+    LibCmdName := '';
+
+    // Set CodePos to beginning of Script
+    CodePos := FCmp.Code;
+
+    // Look for Library Commands in Code
+    repeat
+      try
+        ExecScriptID := ReadByte(CodePos);
+        Line := ReadWord(CodePos);
+        Cmd := ReadWord(CodePos);
+        ProcessCmd(Cmp.ScriptRef.Cmds[Cmd], CodePos, False);
+        if LibCmdName <> '' then
+        begin
+          // MB - Get the library command
+          GetLibCmd(ScriptText, LibCmdName);
+          LibCmdName := '';
+        end;
+      Except
+        // Ignore runtime errors when parsing commands.
+      end;
+    until (Integer(CodePos) - Integer(Cmp.Code) >= Cmp.CodeSize);
+
+    try
+      // Append the Library Commands to the Code
+      if ScriptText.count > 21 then
+        FCmp.CompileFromStrings(ScriptText, '');
+    finally
+      ScriptText.Free;
+      LibCmdLoaded.Free;
+    end;
+end;
+
+
+procedure TScript.GetLibCmd(var ScriptText : TStringList; Command : String);
+var
+  I, Index : Integer;
+  ExecScriptID       : Integer;
+  LoadedList : TStringList;
+begin
+  // MB - Check to see if the command is already loaded.
+  index := LibCmdLoaded.IndexOf(Command);
+  if index < 0 then
+  begin
+    LibCmdLoaded.add(Command);
+  end
+  else
+    exit;
+
+    if Command = 'SYNC' then
+    begin
+      ScriptText.Add(':LIB~SYNC');
+      ScriptText.Add('if CONNECTED');
+      ScriptText.Add('  if LIBPARMCOUNT > 0');
+      ScriptText.Add('    SetDelayTrigger LIBSYNC1 :LIB~SYNC1 2000');
+      ScriptText.Add('    SetTextTrigger  LIBSYNC2 :LIB~SYNC2 LIBPARM[1]');
+      ScriptText.Add('    Pause');
+      ScriptText.Add('    :LIB~SYNC1');
+      ScriptText.Add('    :LIB~SYNC2');
+      ScriptText.Add('    KillTrigger LIBSYNC1');
+      ScriptText.Add('    KillTrigger LIBSYNC2');
+      ScriptText.Add('  end');
+      ScriptText.Add('  SetDelayTrigger LIBSYNC3 :LIB~SYNC3 2000');
+      ScriptText.Add('  SetTextTrigger  LIBSYNC4 :LIB~SYNC4 #145 & #8');
+      ScriptText.Add('  Send #145');
+      ScriptText.Add('  Pause');
+      ScriptText.Add('  :LIB~SYNC3');
+      ScriptText.Add('  :LIB~SYNC4');
+      ScriptText.Add('  KillTrigger LIBSYNC3');
+      ScriptText.Add('  KillTrigger LIBSYNC4');
+      ScriptText.Add('end');
+      ScriptText.Add('return');
+    end
+
+    else if Command = 'LOADGLOBALS' then
+    begin
+      ScriptText.Add(':LIB~LOADGLOBALS');
+      for I := 0 to TWXGlobalVars.Count - 1 do
+        ScriptText.Add('loadGlobal $' + TGlobalVarItem(TWXGlobalVars[I]).Name);
+
+      ScriptText.Add('loadVar $TURN_LIMIT');
+      ScriptText.Add('loadVar $BOT_NAME');
+      ScriptText.Add('return');
+    end
+
+    else if Command = 'SENDMSG' then
+    begin
+      ScriptText.Add(':LIB~SENDMSG');
+      ScriptText.Add('echo "**----- Debug -----*"');
+//      ScriptText.Add('echo "$BOT_NAME = " $BOT_NAME "*"');
+//      ScriptText.Add('echo "$Self_Command = " $Self_Command "*"');
+      ScriptText.Add('echo "$botIsDeaf = " $botIsDeaf "*"');
+      ScriptText.Add('echo "$silent_running = " $silent_running "*"');
+//      ScriptText.Add('echo "$isSubspace = " LIBSubspace "*"');
+//      ScriptText.Add('echo "$isSilent = " LIBSilent "*"');
+//      ScriptText.Add('echo "$isMultiLine = " LIBMultiLine "*-----------------**"');
+
+      // Check that at lease one parameter was passed
+      ScriptText.Add('  if LIBPARMCOUNT < 1');
+      ScriptText.Add('    echo "-ERROR- Not Enough parameters for SendMsg"');
+      ScriptText.Add('    return');
+      ScriptText.Add('  end');
+
+      // Format for single or multiple lines
+      ScriptText.Add('  if LIBMultiLine');
+      ScriptText.Add('    $LIBMSG := "*~5~_*~b[~2" $Mode "~b] ~E{~0" ActiveBotName "~E} ~2- ~1" $Command "*~5~-* *"');
+      ScriptText.Add('    $LIBMSG &= LIBMSG " *~5~-*"');
+      ScriptText.Add('  else');
+      ScriptText.Add('    $LIBMSG := "~2[~5" $Mode "~2] ~H{~1" ActiveBotName "~H} ~3- ~2"');
+      ScriptText.Add('    $LIBMSG &= LIBMSG "~5"');
+      ScriptText.Add('   end');
+
+      // Send message over Sunspace silently
+      ScriptText.Add('  if CONNECTED and (LIBSubspace = True)');
+      ScriptText.Add('    stripAnsi $LIBTXT $LIBMSG');
+      ScriptText.Add('    setDeafClients');
+      ScriptText.Add('    setDelayTrigger LIBSS1 :LIB~SS1 2000');
+      ScriptText.Add('    setTextLineTrigger LIBSS2 :LIB~SS1 "Comm-link open"');
+      ScriptText.Add('    setTextLineTrigger LIBSS3 :LIB~SS1 "Message sent"');
+      ScriptText.Add('    send "''" $LIBTXT "*"');
+      ScriptText.Add('    pause');
+      ScriptText.Add('    :LIB~SS1');
+      ScriptText.Add('    KillTrigger LIBSS1');
+      ScriptText.Add('    KillTrigger LIBSS2');
+      ScriptText.Add('    KillTrigger LIBSS3');
+      ScriptText.Add('    getWord CURRENTLINE $SubSpace 6');
+      ScriptText.Add('    replaceText $SubSpace "." ""');
+      ScriptText.Add('    if $botIsDeaf = False');
+      ScriptText.Add('      if LIBMultiLine = True');
+      ScriptText.Add('        echo "~@~fComm-link open on sub-space band ~G" $SubSpace "~f.**"');
+      ScriptText.Add('        echo "~cSending message on sub-space"');
+      ScriptText.Add('        ReplaceText $LIBMSG #13 "*~fS: "');
+      ScriptText.Add('      else');
+      ScriptText.Add('        echo "~@~cSub-space radio (~G" $SubSpace "~c):**''"');
+      ScriptText.Add('      end');
+      ScriptText.Add('    end');
+      ScriptText.Add('  end');
+
+      // Echo Message locally or to viewscreen
+      ScriptText.Add('  if $botIsDeaf = False');
+      ScriptText.Add('    echo $LIBMSG "*"');
+      ScriptText.Add('  else');
+      ScriptText.Add('    setvar $window_content LIBMSG');
+      ScriptText.Add('    replaceText $window_content #13 "[][]"');
+      ScriptText.Add('    saveVar $window_content');
+      ScriptText.Add('  end');
+
+      // display messsage closed, sync and echo currentline
+      ScriptText.Add('  if (CONNECTED) and (LIBSubspace = True) and ($botIsDeaf = False)');
+      ScriptText.Add('    if LIBMultiLine = True');
+      ScriptText.Add('        echo "*~@~fSub-space comm-link terminated~f.*"');
+      ScriptText.Add('    else');
+      ScriptText.Add('        echo "*~@~fMessage sent on sub-space channel ~G" $SubSpace "~f.*"');
+      ScriptText.Add('    end');
+      ScriptText.Add('    Sync');
+      ScriptText.Add('    SetDeafClients false');
+      ScriptText.Add('    echo "**" CURRENTANSILINE');
+      ScriptText.Add('  end');
+      ScriptText.Add('return');
+    end;
+
+end;
+
 
 procedure TScript.Return;
 begin

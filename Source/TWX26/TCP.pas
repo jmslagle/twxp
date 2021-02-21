@@ -71,6 +71,13 @@ type
     Replace : string;
   end;
 
+  TCP437 = class
+  private
+    Search : string;
+    Replace : string;
+    Mode : Integer;
+  end;
+
 
   TModServer = class(TTelnetServerSocket, IModServer)
   private
@@ -88,8 +95,8 @@ type
     FLocalEcho       : Boolean;
 
     // MB - Strings to hold TW2002 color codes and user color codes
-    SystemQuickText,
-    UserQuickText     : TList ;
+    SystemQuickText, UserQuickText, CP437Text : TList ;
+    CP437Mode : Integer;
 
 
   private
@@ -130,7 +137,7 @@ type
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
 
-    procedure Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE);
+    procedure Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE; CP437 : Boolean = FALSE);
     procedure ClientMessage(MessageText : string);
     procedure AddBuffer(Text : string);
     procedure StopVarDump;
@@ -140,6 +147,8 @@ type
     procedure AddQuickText(Search, Replace : string);
     procedure ClearQuickText(Search : string = '');
     function ApplyQuickText(Text : string) : string;
+    procedure AddCP437Text(Search, Replace : string; Mode : Integer = 0);
+    function ApplyCP437Text(Text : string) : string;
 
     property ClientTypes[Index : Integer] : TClientType read GetClientType write SetClientType;
     property ClientCount : Integer read GetClientCount;
@@ -303,6 +312,58 @@ begin
   AddSystemQuickText('~9', '^[0m^[30;47m');
   AddSystemQuickText('~s', '[s');
   AddSystemQuickText('~u', '[u');
+  AddSystemQuickText('~-', '---------------------------------------------------------------------');
+  AddSystemQuickText('~=', '=====================================================================');
+  AddSystemQuickText('~+', '-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-');
+
+  // MB - Create strings for Text to CP437 conversion
+  CP437Mode := 0;
+  CP437Text := Tlist.Create;
+  addCP437Text('/-', #218 + #196);
+  addCP437Text('-\', #196 + #191);
+  addCP437Text('\-', #192 + #196);
+  addCP437Text('-/', #196 + #217);
+  addCP437Text('/=', #201 + #205);
+  addCP437Text('=\', #205 + #187);
+  addCP437Text('\=', #200 + #205);
+  addCP437Text('=/', #205 + #188);
+  addCP437Text('-.-', #196 + #194 + #196, 1);
+  addCP437Text('-+-', #196 + #197 + #196, 1);
+  addCP437Text('-^-', #196 + #193 + #196, 1);
+  addCP437Text('=.=', #205 + #209 + #205, 1);
+  addCP437Text('=+=', #205 + #216 + #205, 1);
+  addCP437Text('=^=', #205 + #207 + #205, 1);
+  addCP437Text('-.-', #196 + #210 + #196, 2);
+  addCP437Text('-+-', #196 + #215 + #196, 2);
+  addCP437Text('-^-', #196 + #208 + #196, 2);
+  addCP437Text('=.=', #205 + #203 + #205, 2);
+  addCP437Text('=+=', #205 + #206 + #205, 2);
+  addCP437Text('=^=', #205 + #202 + #205, 2);
+  addCP437Text('|-', #195 + #196, 1);
+  addCP437Text('-|', #196 + #180, 1);
+  addCP437Text('|=', #198 + #205, 1);
+  addCP437Text('=|', #205 + #181, 1);
+  addCP437Text('|-', #199 + #196, 2);
+  addCP437Text('-|', #196 + #182, 2);
+  addCP437Text('|=', #204 + #205, 2);
+  addCP437Text('=|', #205 + #185, 2);
+  addCP437Text('-- ', #196 + #196 + ' ');
+  addCP437Text('== ', #205 + #205 + ' ');
+  addCP437Text('= ', #254 + ' ');
+  addCP437Text('- ', #255 + ' ');
+  addCP437Text('-=', #255 + #254);
+  addCP437Text('=-', #254 + #255);
+  addCP437Text('-', #196);
+  addCP437Text('=', #205);
+  addCP437Text(#254, '=');
+  addCP437Text(#255, '-');
+
+  // CP437 single line vertical mode
+  addCP437Text('|', #179, 1);
+
+  // CP437 double line vertical mode
+  addCP437Text('|', #186, 2);
+
 end;
 
 procedure TModServer.BeforeDestruction;
@@ -326,6 +387,14 @@ begin
   UserQuickText.Free;
 
   inherited;
+
+  while (CP437Text.Count > 0) do
+  begin
+    TCP437(CP437Text[0]).Free;
+    CP437Text.Delete(0);
+  end;
+  CP437Text.Free;
+
 end;
 
 function TModServer.ApplyQuickText(Text : string) : string;
@@ -334,6 +403,13 @@ var
 begin
     // Store literal Tildes as null
     Text := stringreplace(Text, '~~', chr(255), [rfReplaceAll]);
+
+    // Apply bot specific tagged line
+    if pos('~_', Text) > 0 then
+      Text := stringreplace(Text, '~_',
+      leftstr('---------------------------------------------------------------------',
+      67 - TWXInterpreter.ActiveBotTagLength) + TWXInterpreter.ActiveBotTag + '--', [rfReplaceAll]);
+
 
     // Apply user QuickText strings
     for I := 0 to UserQuickText.Count - 1 do
@@ -354,6 +430,31 @@ begin
 
     // replace "^[" with literal "<esc>[" in result
     result := stringreplace(Text, '^[', chr(27) + '[', [rfReplaceAll]);
+end;
+
+function TModServer.ApplyCP437Text(Text : string) : string;
+var
+  I : Integer;
+begin
+    // Set vertical mode to single or double based on first corner
+    if (pos('/-', Text) > 0) then
+      CP437Mode := 1;
+    if (pos('/=', Text) > 0) then
+      CP437Mode := 2;
+
+    // Convert text strings to CP437
+    for I := 0 to CP437Text.Count - 1 do
+    begin
+      if (CP437Mode < 2) and (TCP437(CP437Text[I]).Mode < 2) then
+        Text := stringreplace(Text, TCP437(CP437Text[I]).Search,
+                TCP437(CP437Text[I]).Replace, [rfReplaceAll])
+      else if (CP437Mode = 2) and ((TCP437(CP437Text[I]).Mode =0) or
+              (TCP437(CP437Text[I]).Mode = 2)) then
+        Text := stringreplace(Text, TCP437(CP437Text[I]).Search,
+                TCP437(CP437Text[I]).Replace, [rfReplaceAll]);
+    end;
+
+    result := Text;
 end;
 
 procedure TModServer.AddSystemQuickText(Search, Replace : string);
@@ -383,6 +484,20 @@ begin
   UserQuickText.Add(NewText);
 end;
 
+procedure TModServer.AddCP437Text(Search, Replace : string; Mode : Integer = 0);
+var
+  NewText : TCP437;
+begin
+  // build new Syhstem QuickText
+  NewText := TCP437.Create;
+  NewText.Search  := Search;
+  NewText.Replace := Replace;
+  NewText.Mode := Mode;
+
+  CP437Text.Add(NewText);
+end;
+
+
 procedure TModServer.ClearQuickText(Search : string = '');
 var
   I : Integer;
@@ -409,7 +524,7 @@ begin
   end;
 end;
 
-procedure TModServer.Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE);
+procedure TModServer.Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE; CP437 : Boolean = FALSE);
 var
   I : Integer;
   Stream : String;
@@ -419,6 +534,9 @@ begin
     Exit;
 
   Text := ApplyQuickText(Text);
+
+  if CP437 = True then
+    Text := ApplyCP437Text(Text);
 
   Stream := Text;
   for I := 0 to length(Stream) do

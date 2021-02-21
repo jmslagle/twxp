@@ -656,8 +656,6 @@ begin
 
     if (DoCreate) then
     begin
-      CreateDir('data\' + tbDescription.Text);
-
       try
         TWXDatabase.CreateDatabase(S, Head^);
       except
@@ -854,7 +852,6 @@ begin
 
     // create new database
     S := 'data\' + tbDescription.Text + '.xdb';
-    //CreateDir('data\' + tbDescription.Text);
 
     try
       TWXDatabase.CreateDatabase(S, Head^);
@@ -950,12 +947,12 @@ begin
       FindClose(searchFile);
       //RemoveDir(FProgramDir + '\data\' + Name);
 
-      if findfirst(FProgramDir + '\scripts\Mombot4p\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      if findfirst(FProgramDir + '\scripts\Mombot\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
       repeat
-        DeleteFile(FProgramDir + '\scripts\Mombot4p\Games\' + Name + '\' + searchFile.Name);
+        DeleteFile(FProgramDir + '\scripts\Mombot\Games\' + Name + '\' + searchFile.Name);
       until FindNext(searchFile) <> 0;
       FindClose(searchFile);
-      RemoveDir(FProgramDir + '\scripts\Mombot4p\Games\' + Name);
+      RemoveDir(FProgramDir + '\scripts\Mombot\Games\' + Name);
     finally
       FindClose(searchFile);
     end;
