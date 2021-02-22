@@ -2,7 +2,7 @@
 
 ## What is TWX Proxy 3?
 
-**TWX Proxy 3** or TWX3 is a [TradeWars 2002 (TW2002)](http://www.eisonline.com) helper ported from Boreland Turbo Pascal to C# by Microblaster and Shadow.
+**TWX Proxy 3** or TWX3 is a [TradeWars 2002 (TW2002)](http://www.eisonline.com) helper ported from Boreland Turbo Pascal to C#.
 
 Originally written by Remco Mulder, and Elder Prophit. We are proud to finally bring this application to a modern platform so that development can continue.
 
@@ -12,7 +12,7 @@ Originally written by Remco Mulder, and Elder Prophit. We are proud to finally b
 
 ## TWX3 Projects
 
-* [TWX3/Proxy](https://github.com/TW2002/twxp/tree/master/Source/TWX30/Proxy) is the main executalbe and compiler
+* [TWX3/Proxy](https://github.com/TW2002/twxp/tree/master/Source/TWX30/Proxy) is the main executable and compiler
 
 * [TWX3/Library](https://github.com/TW2002/twxp/tree/master/Source/TWX30/Library) is the main library (DLL) for WPF and Core31.
 
