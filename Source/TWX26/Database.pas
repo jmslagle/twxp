@@ -352,6 +352,7 @@ var
   X,
   Index     : Integer;
   S         : TSector;
+  MyClass: TComponent;
 begin
   if (DataBaseOpen) then
     Exit;
@@ -373,10 +374,16 @@ begin
     Exit;
   end;
 {$I+}
-
-  // Check database validity and version number
-  Seek(DataFile, 0);
-  BlockRead(DataFile, FDBHeader, SizeOf(TDataHeader));
+  try
+    // Check database validity and version number
+    Seek(DataFile, 0);
+    BlockRead(DataFile, FDBHeader, SizeOf(TDataHeader));
+  except
+    // MB - added trap to catch an attempt to open a database without a header
+    TWXServer.Broadcast(endl + ANSI_12 + 'Error: Unable yo load database header.' + ANSI_7 + endl);
+    CloseDatabase;
+    Exit
+  end;
 
   if (DBHeader.ProgramName <> 'TWX DATABASE') then
   begin
@@ -520,6 +527,7 @@ var
   Sect     : TSector;
   F        : File;
   FileOpen : Boolean;
+  FS: TFileStream;
 begin
   // Make a database - it doesn't exist
   TWXServer.Broadcast(endl + ANSI_15 + 'Creating database: ' + ANSI_7 + Filename + ANSI_15 + ' (' + IntToStr(Head.Sectors) + ')' + ANSI_7 + endl);
@@ -527,18 +535,16 @@ begin
 
   FileOpen := FALSE;
 
+  // MB - AssignFile / ReWrite was crashing randomly - trying newer file stream instead
+  FS := TFileStream.Create(Filename, fmCreate or fmOpenReadWrite);
   try
-    AssignFile(F, Filename);
-    ReWrite(F, 1);
-    FileOpen := TRUE;
-    BlockWrite(F, Head, SizeOf(TDataHeader));
-    NULLSector(Sect);
+    FS.Write(Head, SizeOf(Head));
 
+    NULLSector(Sect);
     for I := 0 to Head.Sectors do
-      BlockWrite(F, Sect, SizeOf(Sect));
+      FS.Write(Sect, SizeOf(Sect));
   finally
-    if (FileOpen) then
-      CloseFile(F);
+    FS.Free;
   end;
 end;
 

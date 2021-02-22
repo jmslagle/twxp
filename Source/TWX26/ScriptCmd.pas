@@ -62,6 +62,7 @@ uses
   ScriptCmp,
   FormScript,
   Windows,
+  StrUtils,
   Math;
 
 const
@@ -87,7 +88,10 @@ var
   LastMultiplier : Extended = 1;
   MaxFloatVariance : Extended = 0; // EP: Effectively half of the next decimal beyond Precision, aka Epsilon
 
-
+  // MB - Vars to hold data passed to library commands.
+  LibParams : array of TCmdParam;
+  LibSubspace, LibSilent, LibMultiLine : Boolean;
+  LibMessage : String;
 
 function RaiseToPower(const Value : Extended; const Power : Integer) : Extended;
 var
@@ -435,15 +439,44 @@ function CmdEcho(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
   EchoText : string;
   I        : Integer;
+  CP437    : Boolean;
 begin
   // CMD: echo <values...>
+
 
   // string together the parameters and echo to all terms
   for I := 0 to Length(Params) - 1 do
     EchoText := EchoText + Params[I].Value;
 
   // #13 on its own will warp the terminal display - add a linefeed with it
-  TWXServer.Broadcast(StringReplace(EchoText, #13, #13 + #10, [rfReplaceAll]),TRUE,TRUE);
+  TWXServer.Broadcast(StringReplace(EchoText, #13, #13 + #10, [rfReplaceAll]),TRUE,TRUE,FALSE,FALSE);
+
+  Result := caNone;
+end;
+
+function CmdEchoEx(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  EchoText : string;
+  I        : Integer;
+  CP437    : Boolean;
+begin
+  // CMD: echo <values...>
+
+  if Params[0].Value = 'CP437' then
+  begin
+    CP437 := True;
+    Params[0].Value := ''
+  end
+  else
+    CP437 := False;
+
+
+  // string together the parameters and echo to all terms
+  for I := 0 to Length(Params) - 1 do
+    EchoText := EchoText + Params[I].Value;
+
+  // #13 on its own will warp the terminal display - add a linefeed with it
+  TWXServer.Broadcast(StringReplace(EchoText, #13, #13 + #10, [rfReplaceAll]),TRUE,TRUE,FALSE,CP437);
 
   Result := caNone;
 end;
@@ -1177,7 +1210,7 @@ begin
   // var = 1 if <value1> = <value2> else var = 0
 
   // MB - Only do a numeric comparision if both arguments are numeric
-  if (Params[1].IsNumeric and Params[2].IsNumeric) then
+  if SetPrecision <> 0 then
   begin
     try
       // The difference must be within MaxFloatVariance to be considered equal
@@ -1185,7 +1218,7 @@ begin
       Params[0].SetBool(Bool);
     except on E: EScriptError do
       // Float comparison failed,
-      Params[0].SetBool(False);
+      Params[0].SetBool(AnsiSameStr(Params[1].Value, Params[2].Value));
     end;
   end
   else
@@ -1346,7 +1379,7 @@ begin
     Avoids.Free;
   end;
   Result := caNone;
-end;
+end;                                                
 
 function CmdListSectorParameters(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
@@ -1378,14 +1411,85 @@ begin
     Result := caNone;
 end;
 
+
+function CmdLoadGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+begin
+  // Search for an existing item and return value
+  for I := 0 to TWXGlobalVars.Count - 1 do
+  begin
+    if TGlobalVarItem(TWXGlobalVars[I]).Name = TVarParam(Params[0]).Name then
+    begin
+      if TGlobalVarItem(TWXGlobalVars[I]).ArrayCount > 0 then
+        TVarParam(Params[0]).SetArrayFromStrings(TGlobalVarItem(TWXGlobalVars[I]).Data)
+      else
+        Params[0].Value := TGlobalVarItem(TWXGlobalVars[I]).Value;
+    end;
+  end;
+
+  Result := caNone;
+end;
+
+function CmdListGlobals(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+  VarNames, Values : TStringList;
+begin
+  // MB - Create List of Globals
+  VarNames:= TStringList.Create;
+  Values:= TStringList.Create;
+
+  try
+    for I := 0 to TWXGlobalVars.Count - 1 do
+    begin
+      VarNames.add(TGlobalVarItem(TWXGlobalVars[I]).Name);
+      Values.add(TGlobalVarItem(TWXGlobalVars[I]).Value);
+    end;
+
+    Params[0].Value := IntToStr(VarNames.Count);
+    TVarParam(Params[0]).SetArrayFromStrings(VarNames);
+    Params[1].Value := IntToStr(Values.Count);
+    TVarParam(Params[1]).SetArrayFromStrings(Values);
+  finally
+    VarNames.free;
+  end;
+
+  Result := caNone;
+end;
+
 function CmdLoadVar(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
   INI : TINIFile;
+  Globals,
+  VarName : String;
+  VarNames : TStringList;
 begin
   // CMD: loadVar var
 
-  INI := TINIFile.Create(TScript(Script).ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
+  // MB - Remove insclude file names from stored names -------- Breaks Mombot
+//  VarNames:= TStringList.Create;
+//  try
+//    VarName := StringReplace(TVarParam(Params[0]).Name, '$', '', [rfReplaceAll, rfIgnoreCase]);
+//    Split(VarName, VarNames, '~');
+//    VarName := VarNames[VarNames.count - 1];
+//  finally
+//    VarNames.free;
+//  end;
 
+  // MB - Storing the following bot params as Globals instead of INI
+  Globals := '$COMMAND|$MODE|$USER_COMMAND_LINE|$SILENT_RUNNING|$BOTISDEAF|$SELF_COMMAND'
+           + '$BOT~COMMAND|$BOT~MODE|$BOT~USER_COMMAND_LINE'
+           + '$BOT~VSILENT_RUNNING|$BOT~BOTISDEAF|$SWITCHBOARD~SELF_COMMAND';
+  if (pos(TVarParam(Params[0]).Name, Globals) > 0) or
+     (pos('PARM', TVarParam(Params[0]).Name) > 0) then
+  begin
+    CmdLoadGlobal(Script, Params);
+    Result := caNone;
+    exit
+  end;
+
+  INI := TINIFile.Create(TScript(Script).ProgramDir + '\' + StripFileExtension(TWXDatabase.DatabaseName) + '.cfg');
   try
     Params[0].Value := INI.ReadString('Variables', TVarParam(Params[0]).Name, '0');
   finally
@@ -1429,7 +1533,10 @@ begin
   // CMD: mergeText <value1> <value2> var
   // Concatenate two values and store the result
 
-  Params[2].Value := Params[0].Value + Params[1].Value;
+  if Length(Params) = 3 then
+    Params[2].Value := Params[0].Value + Params[1].Value
+  else
+    Params[0].Value := Params[0].Value + Params[1].Value;
 
   Result := caNone;
 end;
@@ -1709,11 +1816,63 @@ begin
   Result := caNone;
 end;
 
+function CmdSaveGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  Found : Boolean;
+  I     : Integer;
+  Data  : TStringList;
+  Indexes : TStringArray;
+begin
+  Found := False;
+
+  // Search for an existing item and update if found
+  //Find := TGlobalVarItem.Create(VarName, '0');
+  //Index := TWXGlobalVars.IndexOf(Find);
+
+  if TVarParam(Params[0]).ArraySize > 0 then
+  begin
+    Data :=  TStringList.Create;
+
+    for I := 1 to TVarParam(Params[0]).ArraySize do
+    begin
+      SetLength(Indexes, 1);
+      Indexes[0] := IntToStr(I);
+
+      Data.Add(TVarParam(Params[0]).GetIndexVar(Indexes).Value)
+    end;
+  end;
+end;
+
+function CmdClearGlobals(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  i : Integer;
+begin
+  for I := 0 to TWXGlobalVars.Count - 1 do
+    TGlobalVarItem(TWXGlobalVars[I]).Destroy;
+
+  TWXGlobalVars.Clear;
+
+  Result := caNone;
+end;
+
 function CmdSaveVar(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
   INI : TINIFile;
+  Globals : String;
 begin
   // CMD: saveVar var
+
+  // MB - Storing the following bot params as Globals instead of INI
+  Globals := '$COMMAND|$MODE|$USER_COMMAND_LINE|$SILENT_RUNNING|$BOTISDEAF|$SELF_COMMAND'
+           + '$BOT~COMMAND|$BOT~MODE|$BOT~USER_COMMAND_LINE'
+           + '$BOT~VSILENT_RUNNING|$BOT~BOTISDEAF|$SWITCHBOARD~SELF_COMMAND';
+  if (pos(TVarParam(Params[0]).Name, Globals) > 0) or
+     (pos('PARM', TVarParam(Params[0]).Name) > 0) then
+  begin
+    CmdSaveGlobal(Script, Params);
+    Result := caNone;
+    exit
+  end;
 
   // MB - This is a patch for a Mombot 3.1044 / 3.1045 incorrectly storing
   //      $MULTIPLE_PHOTONS as a string instead of bool.
@@ -1959,19 +2118,48 @@ end;
 {$HINTS OFF}
 function CmdSetVar(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
+  I : Integer;
   F : Extended;
+  ParamText : String;
 begin
   // CMD: setVar var <value>
 
-  if Params[1].IsNumeric = TRUE then
-    //Params[0].DecValue := Params[1].DecValue
-    //UpdateParam(Params[0], Params[1].DecValue, TScript(Script).DecimalPrecision) // this way Precision is captured
-    UpdateParam(Params[0], Params[1].DecValue, Params[1].SigDigits)
+  if Length(Params) > 2 then
+  begin
+    // MB - Now you can string together parameters like echo without concatting.
+    for I := 1 to Length(Params) - 1 do
+      ParamText := ParamText + Params[I].Value;
+
+    Params[0].Value := ParamText;
+  end
   else
-    Params[0].Value := Params[1].Value;
-  
+    if (Params[1].IsNumeric = TRUE) and (Length(Params) = 2) then
+      //Params[0].DecValue := Params[1].DecValue
+      //UpdateParam(Params[0], Params[1].DecValue, TScript(Script).DecimalPrecision) // this way Precision is captured
+      UpdateParam(Params[0], Params[1].DecValue, Params[1].SigDigits)
+    else
+      Params[0].Value := Params[1].Value;
+
   Result := caNone;
 end;
+
+function CmdConcat(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+  F : Extended;
+  ParamText : String;
+begin
+  // CMD: CONCAT var <value...>
+
+  // MB - Concat paramters and combine with param[0]
+  for I := 1 to Length(Params) - 1 do
+    ParamText := ParamText + Params[I].Value;
+
+  Params[0].Value := Params[0].Value + ParamText;
+
+  Result := caNone;
+end;
+
 {$HINTS ON}
 
 function CmdSetWindowContents(Script : TObject; Params : array of TCmdParam) : TCmdAction;
@@ -2203,6 +2391,9 @@ var
 begin
   // CMD: write <file> <value>
 
+  if not directoryexists(ExtractFileDir(Params[0].Value)) then
+    CreateDir(ExtractFileDir(Params[0].Value));
+
   SetCurrentDir(TScript(Script).ProgramDir);
   AssignFile(F, Params[0].Value);
 
@@ -2286,86 +2477,6 @@ begin
   Result := caNone;
 end;
 
-function CmdSaveGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
-var
-  Found : Boolean;
-  I     : Integer;
-  Data  : TStringList;
-  Indexes : TStringArray;
-begin
-  Found := False;
-
-  if TVarParam(Params[0]).ArraySize > 0 then
-  begin
-    Data :=  TStringList.Create;
-
-    for I := 1 to TVarParam(Params[0]).ArraySize do
-    begin
-      SetLength(Indexes, 1);
-      Indexes[0] := IntToStr(I);
-
-      Data.Add(TVarParam(Params[0]).GetIndexVar(Indexes).Value)
-    end;
-  end;
-
-  // Search for an existing item and update if found
-  for I := 0 to TWXGlobalVars.Count - 1 do
-  begin
-    if TGlobalVarItem(TWXGlobalVars[I]).Name = TVarParam(Params[0]).Name then
-    begin
-      if TVarParam(Params[0]).ArraySize > 0 then
-      begin
-        TGlobalVarItem(TWXGlobalVars[I]).Value := '';
-        TGlobalVarItem(TWXGlobalVars[I]).Data := Data;
-      end
-      else
-        TGlobalVarItem(TWXGlobalVars[I]).Value := Params[0].Value;
-      Found := True;
-    end;
-  end;
-
-  // Create a new item if no items were found
-  if not Found then
-    if TVarParam(Params[0]).ArraySize > 0 then
-      TWXGlobalVars.Add(TGlobalVarItem.Create(TVarParam(Params[0]).Name, Data))
-    else
-      TWXGlobalVars.Add(TGlobalVarItem.Create(TVarParam(Params[0]).Name, Params[0].Value));
-
-  Result := caNone;
-end;
-
-function CmdLoadGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
-var
-  I : Integer;
-begin
-  // Search for an existing item and return value
-  for I := 0 to TWXGlobalVars.Count - 1 do
-  begin
-    if TGlobalVarItem(TWXGlobalVars[I]).Name = TVarParam(Params[0]).Name then
-    begin
-      if TGlobalVarItem(TWXGlobalVars[I]).ArrayCount > 0 then
-        TVarParam(Params[0]).SetArrayFromStrings(TGlobalVarItem(TWXGlobalVars[I]).Data)
-      else
-        Params[0].Value := TGlobalVarItem(TWXGlobalVars[I]).Value;
-    end;
-  end;
-
-  Result := caNone;
-end;
-
-function CmdClearGlobal(Script : TObject; Params : array of TCmdParam) : TCmdAction;
-var
-  i : Integer;
-begin
-  for I := 0 to TWXGlobalVars.Count - 1 do
-    TGlobalVarItem(TWXGlobalVars[I]).Destroy;
-
-  TWXGlobalVars.Clear;
-
-  Result := caNone;
-end;
-
-
 function CmdSwitchBot(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
    IniFile     : TIniFile;
@@ -2380,7 +2491,7 @@ begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
   NextBot := '';
 
-  if (Length(Params) = 1) and (Params[0].Value <> '') and (Params[0].Value <> '0') then
+  if (Length(Params) > 0) and (Params[0].Value <> '') and (Params[0].Value <> '0') then
   begin
   try
     SectionList := TStringList.Create;
@@ -2421,6 +2532,7 @@ begin
         begin
           BotScript  := IniFile.ReadString(Section, 'Script', '');
 
+          ScriptList.Clear();
           ExtractStrings([','], [], PChar(BotScript), ScriptList);
           if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptList[0]) then
           begin
@@ -2452,7 +2564,12 @@ begin
 
   // Load the selected bot
   if (NextBot <> '') then
-    TWXInterpreter.SwitchBot(NextBot, FALSE);
+    if (Length(Params) > 1) and (Params[1].Value <> '0') then
+      TWXInterpreter.SwitchBot(NextBot, Params[1].Value, FALSE)
+    else
+      TWXInterpreter.SwitchBot(NextBot, '', FALSE);
+
+
 
   Result := caNone;
 end;
@@ -2489,10 +2606,10 @@ begin
         ScriptFile  := IniFile.ReadString(Section, 'Script', '');
         NameVar  := IniFile.ReadString(Section, 'NameVar', '');
 
-         BotName := '{}';
+         BotName := '~f{~c~f}';
         if Length(NameVar) > 0 then
           if Pos('file:', LowerCase(NameVar)) = 0 then
-            BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
+            BotName := '~f{~c' + INI.ReadString('Variables', NameVar, '0') + '~f}'
           else
           begin
             FileName := StringReplace(NameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
@@ -2500,27 +2617,31 @@ begin
             if (FileExists(TWXGUI.ProgramDir + '\' + FileName)) then
             begin
               try
+                fileData.Clear();
                 fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
-                BotName := '{' + fileData[0] + '}';
+                BotName := '~f{~c' + fileData[0] + '~f}';
               finally
-                fileData.Free;
               end;
             end;
           end;
+
+          if BotName = '~f{~c0~f}' then
+            BotName := '~f{~c~f}';
+
 
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
             //BotList.add(Format('~D>~C%-8s ~G%s', [Alias, BotName]))
-            BotList.add(Format('%-8s %-6s %s <ACTIVE>', [BotName, Alias, Name]))
+            BotList.add(Format('%-14s ~G%-6s ~F%s ~B<ACTIVE>', [BotName, Alias, Name]))
           else
             //BotList.add(Format('~C %-8s ~G%s', [Alias, BotName]));
-            BotList.add(Format('%-8s %-6s %s', [BotName, Alias, Name]));
+            BotList.add(Format('%-14s ~G%-6s ~F%s', [BotName, Alias, Name]))
           end;
         end;
       end;
   finally
-
+    fileData.Free;
   end;
 
   TVarParam(Params[0]).SetArrayFromStrings(BotList);
@@ -2617,6 +2738,8 @@ begin
       if S <> '0' then
         Data.Add(S);
       I := I + 1;
+      if (TVarParam(Params[0]).ArraySize > 0) and (I > TVarParam(Params[0]).ArraySize) then
+        break;
   end;
   until S = '0';
   Data.Sort;
@@ -2629,12 +2752,56 @@ end;
 function CmdFind(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
   I,
-  Index : Integer;
+  Start : Integer;
   S     : String;
-  Data  : TStringList;
   Indexes : TStringArray;
 begin
-  //CMD: Find <Array> <Value> <Index>
+  //CMD: Find <Array> <Value> <Index> [Start]
+  //     Finds the specified value in an array of strings.
+
+  IF Length(params) > 3 then
+    Start := strtointdef(params[3].Value,1)
+  else
+    Start := 1;
+
+  I := 1;
+  Params[2].DecValue := 0;
+
+  repeat
+  begin
+      SetLength(Indexes, 1);
+      Indexes[0] := IntToStr(I);
+
+      S :=  TVarParam(Params[0]).GetIndexVar(Indexes).Value;
+      if (S <> '0') and (Pos(uppercase(Params[1].Value), uppercase(S)) > 0) then
+        if Start > 1 then
+          Start := Start -1
+        else
+          if Params[2].DecValue = 0 then
+            Params[2].DecValue := i;
+      I := I + 1;
+      if (TVarParam(Params[0]).ArraySize > 0) and (I > TVarParam(Params[0]).ArraySize) then
+        break;
+  end;
+  until S = '0';
+
+  if S = '0' then
+    Params[0].DecValue := I - 2
+  else
+    Params[0].DecValue := I - 1;
+
+  Result := caNone;
+end;
+
+function CmdFindAll(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I,
+  Index   : Integer;
+  S       : String;
+  Data    : TStringList;
+  Indexes : TStringArray;
+begin
+  //CMD: Find <SourceArray> <FoundArray>
   //     Finds a value in a sorted array.
 
   Data :=  TStringList.Create;
@@ -2646,19 +2813,21 @@ begin
       Indexes[0] := IntToStr(I);
 
       S :=  TVarParam(Params[0]).GetIndexVar(Indexes).Value;
-      if S <> '0' then
+      if (S <> '0') and (Pos(uppercase(Params[2].Value), uppercase(S)) > 0) then
         Data.Add(S);
       I := I + 1;
+      if (TVarParam(Params[0]).ArraySize > 0) and (I > TVarParam(Params[0]).ArraySize) then
+        break;
   end;
   until S = '0';
-  Data.Sort;
-  Data.Find(Params[1].Value, Index);
 
-  Params[2].DecValue := Index + 1;
+  Params[1].Value := IntToStr(Data.Count);
+  TVarParam(Params[1]).SetArrayFromStrings(Data);
   Result := caNone;
 end;
 
-function CmdModulas(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+
+function CmdModulus(Script : TObject; Params : array of TCmdParam) : TCmdAction;
 var
   F1,
   F2 : integer;
@@ -2786,10 +2955,10 @@ begin
     end;
 
     // Terminate the current process last.
-    Handle := OpenProcess(PROCESS_TERMINATE, FALSE, GetCurrentProcessId());
-    if Handle > 0 then
-      SendMessage(Handle, WM_QUIT, 0, 0);
-        TerminateProcess(Handle, 0)
+    //Handle := OpenProcess(PROCESS_TERMINATE, FALSE, GetCurrentProcessId());
+    //if Handle > 0 then
+    //  SendMessage(Handle, WM_QUIT, 0, 0);
+    //    TerminateProcess(Handle, 0)
   end
   else
   begin
@@ -2866,7 +3035,6 @@ end;
 
 procedure ClearScriptData(Name: string);
 var
-  Result : Integer;
   searchFile : TSearchRec;
 begin
     TWXServer.ClientMessage('Clearing script data files.');
@@ -2883,12 +3051,12 @@ begin
       until FindNext(searchFile) <> 0;
       SysUtils.FindClose(searchFile);
 
-      if findfirst(TWXGUI.ProgramDir + '\scripts\Mombot4p\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      if findfirst(TWXGUI.ProgramDir + '\scripts\Mombot\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
       repeat
-        DeleteFile(pchar(TWXGUI.ProgramDir + '\scripts\Mombot4p\Games\' + Name + '\' + searchFile.Name));
+        DeleteFile(pchar(TWXGUI.ProgramDir + '\scripts\Mombot\Games\' + Name + '\' + searchFile.Name));
       until FindNext(searchFile) <> 0;
       SysUtils.FindClose(searchFile);
-      RemoveDir(TWXGUI.ProgramDir + '\scripts\Mombot4p\Games\' + Name);
+      RemoveDir(TWXGUI.ProgramDir + '\scripts\Mombot\Games\' + Name);
     finally
       SysUtils.FindClose(searchFile);
     end;
@@ -2905,9 +3073,6 @@ begin
 
   CopyFile(pchar(TWXGUI.ProgramDir + '\data\' + Source + '.xdb'),
            pchar(TWXGUI.ProgramDir + '\data\' + Dest + '.xdb'), FALSE);
-
-  CreateDir('data\' + Dest);
-
 
   Result := caNone;
 end;
@@ -2954,8 +3119,6 @@ begin
 
   if FileExists('data\' + Database + '.xdb') = FALSE then
   begin
-    CreateDir('data\' + Database);
-
     try
       TWXDatabase.CreateDatabase('data\' + Database + '.xdb', Head^);
     except
@@ -3126,7 +3289,6 @@ begin
     TWXServer.ClientMessage('Error: ' + ANSI_7 + Database + ' is open in another instance.');
     Exit;
   End;
-
   CloseHandle(HFileRes);
 
   try
@@ -3245,6 +3407,135 @@ begin
 
   Result := caNone;
 end;
+
+function CmdSaveHelp(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  S, Line,
+  PARM1,
+  FileName : String;
+  I        : Integer;
+  FS       : TFileStream;
+begin
+  // CMD: saveHelp <text> <cmd> <mode> <keywords> <date>
+  // Date shou be in the format YYYYMMDD with no other formatting.
+
+  // Load bot paramater PARM1 from globals.
+  for I := 0 to TWXGlobalVars.Count - 1 do
+    if TGlobalVarItem(TWXGlobalVars[I]).Name = '$PARM1' then
+    begin
+      PARM1 := TGlobalVarItem(TWXGlobalVars[I]).Value;
+      break;
+    end;
+
+
+  if (Length(TWXInterpreter.ActiveBotDir) > 0) then
+  begin
+    FileName := TScript(Script).ProgramDir + '\scripts\' +
+                TWXInterpreter.ActiveBotDir + '\help\' + Params[1].Value + '.txt';
+
+    if (not FileExists(FileName)) or (PARM1 = '?') then
+    begin
+      S := Params[1].Value + ' - ' + Params[0].Value;
+      TWXExtractor.StripANSI(S);
+
+      try
+        FS := TFileStream.Create(Filename, fmCreate or fmOpenReadWrite);
+        try
+          FS.Write(S, SizeOf(S));
+        finally
+          FS.Free;
+        end;
+      except
+        on E: Exception do begin
+          MessageBox(0, PChar(E.message), 'Error', MB_ICONERROR or MB_OK);
+        end;
+      end;
+    end;
+  end;
+
+  if (PARM1 = '?')or (lowercase(PARM1) = 'help') then
+  begin
+    line := '~5~+' + #13 + #13;
+    S := '~1' + Params[1].Value + '~5 - ~2' + Params[0].Value;
+    S := StringReplace(S,'-','~5-~2',[rfReplaceAll]);
+    S := StringReplace(S,'=','~5=~2',[rfReplaceAll]);
+    S := StringReplace(S,':','~5:~1',[rfReplaceAll]);
+    S := StringReplace(S,'[','~3[~5',[rfReplaceAll]);
+    S := StringReplace(S,']','~3]~2',[rfReplaceAll]);
+    S := StringReplace(S,'{','~3{~5',[rfReplaceAll]);
+    S := StringReplace(S,'}','~3}~2',[rfReplaceAll]);
+    S := StringReplace(S,'(','~3(~1',[rfReplaceAll]);
+    S := StringReplace(S,')','~3)~2',[rfReplaceAll]);
+    S := StringReplace(S,'Usage','~2Usage~2',[rfReplaceAll]);
+    // {} []
+    TWXServer.Broadcast(StringReplace(line +
+      S + #13 + #13 + line + #13, #13, #13 + #10, [rfReplaceAll]) +
+      TWXExtractor.CurrentANSILine,TRUE,TRUE);
+    Result := caStop;
+  end
+  else
+    Result := caNone;
+
+end;
+
+
+function CmdLibCmd(Script : TObject; Params : array of TCmdParam) : TCmdAction;
+var
+  I : Integer;
+  S : String;
+  SelfCommand,
+  BotIsDeaf,
+  SilentRunning : Boolean;
+begin
+  // CMD: LibCmd <label> <params>
+
+  LibSubSpace := False;
+  LibSilent := False;
+
+  // string together the parameters and ssve as LibMessage.
+  for I := 1 to Length(Params) - 1 do
+  begin
+    if uppercase(Params[I].Value) = 'SS' then
+      LibSubSpace := True
+    else if uppercase(Params[I].Value) = 'SILENT' then
+      LibSilent := True
+    else
+      S := S + Params[I].Value;
+  end;
+  LibMultiLine := pos(#13, S) > 0;
+  LibMessage := S;
+
+  // Load globals used by library commands
+  for I := 0 to TWXGlobalVars.Count - 1 do
+  begin
+    if TGlobalVarItem(TWXGlobalVars[I]).Name = 'SELF_COMMAND' then
+      SelfCommand := TGlobalVarItem(TWXGlobalVars[I]).Value <> '0';
+    if TGlobalVarItem(TWXGlobalVars[I]).Name = 'BOTISDEAF' then
+      BotIsDeaf := TGlobalVarItem(TWXGlobalVars[I]).Value <> '0';
+    if TGlobalVarItem(TWXGlobalVars[I]).Name = 'SILENT_RUNNING' then
+      SilentRunning := TGlobalVarItem(TWXGlobalVars[I]).Value <> '0';
+  end;
+
+  // Overide param and set LibSubSpace if SelfCommand or SilentRunning.
+  if SelfCommand = False then
+    LibSubSpace := True;
+
+  // Overide param and set LibSilent if botIsDeaf or SilentRunning.
+  if BotIsDeaf or SilentRunning then
+    LibSilent := True;
+
+  begin
+    // Save all Params to global.
+    SetLength(LibParams,Length(Params));
+    for I:=0 to Length(Params) - 1 do
+      LibParams[I] := Params[I];
+    end;
+
+  //Execute the library command.
+  TScript(Script).Gosub(':LIB~' + Params[0].Value);
+  Result := caNone;
+end;
+
 
 
 // *****************************************************************************
@@ -4353,6 +4644,11 @@ Result := Format('%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s
   SCCurrentScanType(Indexes)]);
 end;
 
+function SCGameData(Indexes : TStringArray) : string;
+begin
+  Result := StripFileExtension(TWXDatabase.DatabaseName) + '\';
+end;
+
 function SCBotList(Indexes : TStringArray) : string;
 var
    IniFile, INI : TIniFile;
@@ -4365,7 +4661,6 @@ var
    BotList,
    Section      : String;
    SectionList  : TStringList;
-   I : Integer;
    FileData : TStringList;
 begin
   IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
@@ -4383,10 +4678,10 @@ begin
         ScriptFile  := IniFile.ReadString(Section, 'Script', '');
         NameVar  := IniFile.ReadString(Section, 'NameVar', '');
 
-        BotName := '{}';
+        BotName := '~3{~4~3}';
         if Length(NameVar) > 0 then
           if Pos('file:', LowerCase(NameVar)) = 0 then
-            BotName := '{' + INI.ReadString('Variables', NameVar, '0') + '}'
+            BotName := '~3{~4' + INI.ReadString('Variables', NameVar, '') + '~3}'
           else
           begin
             FileName := StringReplace(NameVar, 'FILE:', '', [rfReplaceAll, rfIgnoreCase]);
@@ -4396,31 +4691,71 @@ begin
               try
                 fileData := TStringList.Create;
                 fileData.LoadFromFile(TWXGUI.ProgramDir + '\' + FileName);
-                BotName := '{' + fileData[0] + '}';
+                BotName := '~3{~4' + fileData[0] + '~3}';
               finally
                 fileData.Free;
               end;
             end;
           end;
 
+//        if BotName = '~c{~f0~c}' then
+//          BotName := '~c{}';
+
         if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
         begin
-          BotList := BotList + Format('%-8s %-6s %s', [BotName, Alias, Name]);
+          BotList := BotList + Format('  %-14s ~1%-6s ~2%s', [BotName, Alias, Name]);
           if Pos(LowerCase(ScriptFile), LowerCase(TWXInterpreter.ActiveBotScript)) > 0 then
-             BotList := BotList +  ' <ACTIVE>';
-          end;
+             BotList := BotList +  ' ~B<ACTIVE>';
+
           BotList := BotList +  chr(13);
         end;
       end;
+    end;
   finally
   end;
 
   Result := BotList;
 end;
 
+function SCActiveBots(Indexes : TStringArray) : string;
+var
+   IniFile : TIniFile;
+   BotCount : Integer;
+   ScriptFile,
+   Section      : String;
+   SectionList  : TStringList;
+begin
+  IniFile := TIniFile.Create(TWXGUI.ProgramDir + '\twxp.cfg');
+  BotCount := 0;
+
+  try
+    SectionList := TStringList.Create;
+    IniFile.ReadSections(SectionList);
+    for Section in SectionList do
+    begin
+      if (Pos('bot:', LowerCase(Section)) = 1) then
+      begin
+        ScriptFile  := IniFile.ReadString(Section, 'Script', '');
+
+        if FileExists (TWXGUI.ProgramDir + '\scripts\' + ScriptFile) then
+          inc(BotCount);
+      end;
+    end;
+  finally
+  end;
+
+  Result := inttostr(BotCount);
+end;
+
+
 function SCActiveBot(Indexes : TStringArray) : string;
 begin
   Result := TWXInterpreter.ActiveBot;
+end;
+
+function SCActiveBotDir(Indexes : TStringArray) : string;
+begin
+  Result := TWXInterpreter.ActiveBotDir;
 end;
 
 function SCActiveBotScript(Indexes : TStringArray) : string;
@@ -4473,6 +4808,123 @@ begin
 
   WarpsIn.Free;
 end;
+
+function SCLIBPARM(Indexes : TStringArray) : string;
+var
+  ParmIndex : Integer;
+begin
+  if (Length(Indexes) < 1) then
+    raise EScriptError.Create('Invalid parameters for LIBPARM[index]');
+
+  ConvertToNumber(Indexes[0], ParmIndex);
+
+  if ParmIndex < Length(LibParams) then
+    Result :=  LibParams[ParmIndex].Value
+  else
+    Result := '';
+end;
+
+function SCLIBPARMS(Indexes : TStringArray) : string;
+var
+  S : String;
+  I : Integer;
+begin
+  for I := 0 to Length(LibParams) - 1 do
+  begin
+    S := S + LibParams[I].Value;
+    if i <  Length(LibParams) - 1 then
+      S := S + ' ';
+  end;
+
+  Result := S;
+end;
+
+function SCLIBPARMCOUNT(Indexes : TStringArray) : string;
+begin
+    Result := inttostr(Length(LibParams) - 1);
+end;
+
+function SCLIBSUBSPACE(Indexes : TStringArray) : string;
+begin
+  if LibSubspace then
+    Result := '1'
+  else
+    Result := '0';
+end;
+
+function SCLIBSILENT(Indexes : TStringArray) : string;
+begin
+  if LibSilent then
+    Result := '1'
+  else
+    Result := '0';
+end;
+
+function SCLIBMULTILINE(Indexes : TStringArray) : string;
+begin
+  if LibMultiLine then
+    Result := '1'
+  else
+    Result := '0';
+end;
+
+function SCLIBMSG(Indexes : TStringArray) : string;
+var
+  I, J     : Integer;
+  S,
+  line     : String;
+  strings,
+  words    : TStringList;
+begin
+
+  if LibMultiLine = False then
+  begin
+    Result := LibMessage;
+    exit
+  end;
+
+  S := '';
+
+  strings := TStringList.Create;
+  words := TStringList.Create;
+
+  try
+    Split(LibMessage, strings, #13);
+      I := 0;
+      while (I < strings.Count) do
+      begin
+        if Length(strings[I]) < 68 then
+          S := S + strings[I] + ' ' + #13
+        else
+        begin
+          line := '';
+          words.clear();
+          Split(strings[I], words, ' ');
+          J := 0;
+          while (J < words.Count) do
+          begin
+            if Length(line) + Length(words[J]) < 68 then
+            begin
+              line := line + words[J] + ' ';
+            end
+            else
+            begin
+               S := S + LeftStr(line, Length(line) -1) + #13;
+               line := '';
+            end;
+            Inc(J);
+          end;
+          S := S + LeftStr(line, Length(line) -1) + #13;
+        end;
+        Inc(I);
+      end;
+    finally
+      strings.Free;
+      words.Free;
+    end;
+    Result := S;
+end;
+
 // *****************************************************************************
 //                             LIST BUILDER METHODS
 // *****************************************************************************
@@ -4593,8 +5045,11 @@ begin
     AddSysConstant('CURRENTQUICKSTATS',SCCurrentQuickStats);
     AddSysConstant('CURRENTQS',SCCurrentQS);
     AddSysConstant('CURRENTQSTAT',SCCurrentQSTAT);
+    AddSysConstant('GAMEDATA',SCGameData);
     AddSysConstant('BOTLIST',SCBotList);
     AddSysConstant('ACTIVEBOT',SCActiveBot);
+    AddSysConstant('ACTIVEBOTS',SCActiveBots);
+    AddSysConstant('ACTIVEBOTDIR',SCActiveBotDir);
     AddSysConstant('ACTIVEBOTSCRIPT',SCActiveBotScript);
     AddSysConstant('ACTIVEBOTNAME',SCActiveBotName);
     AddSysConstant('VERSION',SCTWXVersion);
@@ -4602,6 +5057,15 @@ begin
     AddSysConstant('TWGSVER',SCTWGSVer);
     AddSysConstant('TW2002VER',SCTW2002Ver);
     AddSysConstant('SECTOR.DEADEND', SCSector_DeadEnd);
+
+    // MB - Internal system vars for library Parms and Parm count.
+    AddSysConstant('LIBPARM', SCLIBPARM);
+    AddSysConstant('LIBPARMS', SCLIBPARMS);
+    AddSysConstant('LIBPARMCOUNT', SCLIBPARMCOUNT);
+    AddSysConstant('LIBSUBSPACE', SCLIBSUBSPACE);
+    AddSysConstant('LIBSILENT', SCLIBSILENT);
+    AddSysConstant('LIBMULTILINE', SCLIBMULTILINE);
+    AddSysConstant('LIBMSG', SCLIBMSG);
   end;
 end;
 
@@ -4659,7 +5123,7 @@ begin
     AddCommand('LOADVAR', 1, 1, CmdLoadVar, [pkVar], pkValue);
     AddCommand('LOGGING', 1, 1, CmdLogging, [pkValue], pkValue);
     AddCommand('LOWERCASE', 1, 1, CmdLowerCase, [pkVar], pkValue);
-    AddCommand('MERGETEXT', 3, 3, CmdMergeText, [pkValue, pkValue, pkVar], pkValue);
+    AddCommand('MERGETEXT', 2, 3, CmdMergeText, [pkValue, pkValue, pkVar], pkValue);
     AddCommand('MULTIPLY', 2, 2, CmdMultiply, [pkVar, pkValue], pkValue);
     AddCommand('OPENMENU', 1, 2, CmdOpenMenu, [pkValue, pkValue], pkValue);
     AddCommand('OR', 2, 2, CmdOr, [pkVar, pkValue], pkValue);
@@ -4689,7 +5153,7 @@ begin
     AddCommand('SETTEXTLINETRIGGER', 2, 3, CmdSetTextLineTrigger, [pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETTEXTOUTTRIGGER', 2, 3, CmdSetTextOutTrigger, [pkValue, pkValue, pkValue], pkValue);
     AddCommand('SETTEXTTRIGGER', 2, 3, CmdSetTextTrigger, [pkValue, pkValue, pkValue], pkValue);
-    AddCommand('SETVAR', 2, 2, CmdSetVar, [pkVar, pkValue], pkValue);
+    AddCommand('SETVAR', 2, -1, CmdSetVar, [pkVar, pkValue], pkValue);
     AddCommand('SETWINDOWCONTENTS', 2, 2, CmdSetWindowContents, [pkValue, pkValue], pkValue);
     AddCommand('SOUND', 1, 1, CmdSound, [pkValue], pkValue);
     AddCommand('STOP', 1, 1, CmdStop, [pkValue], pkValue);
@@ -4745,9 +5209,9 @@ begin
 
     AddCommand('SAVEGLOBAL', 1, 1, CmdSaveGlobal, [pkValue], pkValue);
     AddCommand('LOADGLOBAL', 1, 1, CmdLoadGlobal, [pkValue], pkValue);
-    AddCommand('CLEARGLOBAL', 0, 0, CmdClearGlobal, [], pkValue);
+    AddCommand('CLEARGLOBALS', 0, 0, CmdClearGlobals, [], pkValue);
 
-    AddCommand('SWITCHBOT', 0, 1, CmdSwitchBot, [pkValue], pkValue);
+    AddCommand('SWITCHBOT', 0, 2, CmdSwitchBot, [pkValue], pkValue);
 
     AddCommand('STRIPANSI', 2, 2, CmdStripANSI, [pkValue, pkValue], pkValue);
 
@@ -4761,8 +5225,9 @@ begin
 
     AddCommand('REQVERSION', 1, 1, CmdReqVersion, [pkValue], pkValue);
     AddCommand('SORT', 2, 2, CmdSort, [pkValue], pkValue);
-    AddCommand('FIND', 3, 3, CmdFind, [pkValue], pkValue);
-    AddCommand('MODULAS', 2, 2, CmdModulas, [pkValue], pkValue);
+    AddCommand('FIND', 3, 4, CmdFind, [pkValue], pkValue);
+    AddCommand('FINDALL', 3, 3, CmdFindAll, [pkValue], pkValue);
+    AddCommand('MODULUS', 2, 2, CmdModulus, [pkValue], pkValue);
     AddCommand('DIREXISTS', 2, 2, CmdDirExists, [pkValue], pkValue);
     AddCommand('LABELEXISTS', 2, 2, CmdLabelExists, [pkValue], pkValue);
 
@@ -4782,7 +5247,12 @@ begin
     AddCommand('STOPTIMER', 1, 1, CmdStopTimer, [pkValue], pkValue);
 
     AddCommand('STOPALL', 0, 1, CmdStopAll, [pkValue], pkValue);
+    AddCommand('CONCAT', 2, -1, CmdConcat, [pkVar, pkValue], pkValue);
+    AddCommand('SAVEHELP', 2, 5, CmdSaveHelp, [pkValue, pkValue], pkValue);
+    AddCommand('LISTGLOBALS', 2, 2, CmdListGlobals, [pkValue], pkValue);
 
+    AddCommand('LIBCMD', 1, -1, CmdLibCmd
+    , [pkValue], pkValue);
 
     //    AddCommand('', 1, 1, Cmd, [pkValue], pkValue);
     // GETGAMESETTINGS CmdGotoPrompt ??? Switchboard ??? Maybe

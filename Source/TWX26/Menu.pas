@@ -66,6 +66,7 @@ type
     procedure miConnect(ClientIndex : Byte);
     procedure miStopScript(ClientIndex : Byte);
     procedure miToggleDeaf(ClientIndex : Byte);
+    procedure miStreamingMode(ClientIndex : Byte);
     procedure miShowClients(ClientIndex : Byte);
     procedure miExit(ClientIndex : Byte);
 
@@ -704,6 +705,10 @@ begin
     Menu.Help := 'Deafs clients are telnet terminals that don''t receive anything from the remote server.  This option will '
       + 'turn your connected terminal into a ''deaf'' terminal.  This is great if you have a fast-paced script running in the background and you want to query your database.';
     AddItem(Menu);
+    Menu := TTWXMenuItem.Create(Self, 'TWX_STREAMINGMODE', miStreamingMode, 'Enable Streaming Mode', '', '/');
+    Menu.Help := 'Enables streaming mode for this client. This will '
+      + 'allow you to share your screan without revealing your location or the location of your assets.';
+    AddItem(Menu);
     Menu := TTWXMenuItem.Create(Self, 'TWX_SHOWCLIENTS', miShowClients, 'Show all clients', '', '-');
     Menu.Help := 'This option will show all telnet terminals connected to TWX Proxy, along with their IP addresses.';
     AddItem(Menu);
@@ -1031,7 +1036,7 @@ procedure TModMenu.ApplySetup;
   end;
 begin
   // set items in setup menu to match this program setup
-  GetMenuByName('TWX_LISTENPORT').Value := IntToStr(TWXServer.ListenPort);
+  //GetMenuByName('TWX_LISTENPORT').Value := IntToStr(TWXDatabase.ListenPort);
   GetMenuByName('TWX_BUBBLESIZE').Value := IntToStr(TWXBubble.MaxBubbleSize);
   GetMenuByName('TWX_RECONNECT').Value := BoolToStr(TWXClient.Reconnect);
   GetMenuByName('TWX_LOG').Value := BoolToStr(TWXLog.LogEnabled);
@@ -1059,6 +1064,11 @@ begin
 
   if (Result = nil) then
     raise EMenuException.Create('Cannot find menu ''' + MenuName + '''');
+
+
+  // MB - this is no longer a setting, but stored in database header
+  if (MenuName = 'TWX_LISTENPORT') then
+    Result.Value := IntToStr(TWXDatabase.ListenPort);
 end;
 
 
@@ -1122,6 +1132,15 @@ begin
     TWXServer.ClientMessage('Client ' + IntToStr(ClientIndex) + ' is no longer deaf');
     TWXServer.ClientTypes[ClientIndex] := ctStandard;
   end;
+end;
+
+procedure TModMenu.miStreamingMode(ClientIndex : Byte);
+begin
+  if (ClientIndex > TWXServer.ClientCount - 1) then
+    Exit;
+
+  TWXServer.ClientMessage('Client ' + IntToStr(ClientIndex) + ' is now in Streaming Mode');
+  TWXServer.ClientTypes[ClientIndex] := ctStream;
 end;
 
 procedure TModMenu.miShowClients(ClientIndex : Byte);

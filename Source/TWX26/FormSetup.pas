@@ -656,8 +656,6 @@ begin
 
     if (DoCreate) then
     begin
-      CreateDir('data\' + tbDescription.Text);
-
       try
         TWXDatabase.CreateDatabase(S, Head^);
       except
@@ -799,18 +797,26 @@ end;
 
 procedure TfrmSetup.btnResetClick(Sender: TObject);
 var
-  Result   : Integer;
-  S, DB    : string;
-  Head     : PDataHeader;
-  HFileRes : HFILE;
+  I, Result : Integer;
+  S, DB     : string;
+  Head      : PDataHeader;
+  HFileRes  : HFILE;
 begin
   if (cbGames.ItemIndex > -1) then
   begin
     Result := MessageDlg('Are you sure you want to reset this database?', mtWarning, [mbYes, mbNo], 0);
-
     if (Result = mrNo) then
       Exit;
 
+    // Stop all running scrits
+    while (I < TWXInterpreter.Count) do
+      TWXInterpreter.Stop(I);
+
+    // Disconnect from server
+    if TWXGUI.Connected then
+      TWXClient.Disconnect;
+
+    // Create a new DB heaader, and set StarDock locaaaaation to unknown
     Head := @(TDatabaseLink(DataLinkList[cbGames.ItemIndex]^).DataHeader);
     Head.StarDock := 65535;
 
@@ -828,6 +834,7 @@ begin
       MessageDlg('Error - Database is locked by anither instance.', mtWarning, [mbOK], 0);
       Exit;
     End;
+    CloseHandle(HFileRes);
 
     // delete selected database and refresh headers held in memory
     TWXServer.ClientMessage('Reseting database: ' + ANSI_7 + S);
@@ -845,7 +852,6 @@ begin
 
     // create new database
     S := 'data\' + tbDescription.Text + '.xdb';
-    //CreateDir('data\' + tbDescription.Text);
 
     try
       TWXDatabase.CreateDatabase(S, Head^);
@@ -941,12 +947,12 @@ begin
       FindClose(searchFile);
       //RemoveDir(FProgramDir + '\data\' + Name);
 
-      if findfirst(FProgramDir + '\scripts\Mombot4p\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
+      if findfirst(FProgramDir + '\scripts\Mombot\Games\' + Name + '\*.*', faAnyFile, searchFile) = 0 then
       repeat
-        DeleteFile(FProgramDir + '\scripts\Mombot4p\Games\' + Name + '\' + searchFile.Name);
+        DeleteFile(FProgramDir + '\scripts\Mombot\Games\' + Name + '\' + searchFile.Name);
       until FindNext(searchFile) <> 0;
       FindClose(searchFile);
-      RemoveDir(FProgramDir + '\scripts\Mombot4p\Games\' + Name);
+      RemoveDir(FProgramDir + '\scripts\Mombot\Games\' + Name);
     finally
       FindClose(searchFile);
     end;

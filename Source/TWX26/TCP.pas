@@ -71,6 +71,13 @@ type
     Replace : string;
   end;
 
+  TCP437 = class
+  private
+    Search : string;
+    Replace : string;
+    Mode : Integer;
+  end;
+
 
   TModServer = class(TTelnetServerSocket, IModServer)
   private
@@ -88,8 +95,8 @@ type
     FLocalEcho       : Boolean;
 
     // MB - Strings to hold TW2002 color codes and user color codes
-    SystemQuickText,
-    UserQuickText     : TList ;
+    SystemQuickText, UserQuickText, CP437Text : TList ;
+    CP437Mode : Integer;
 
 
   private
@@ -130,7 +137,7 @@ type
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
 
-    procedure Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE);
+    procedure Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE; CP437 : Boolean = FALSE);
     procedure ClientMessage(MessageText : string);
     procedure AddBuffer(Text : string);
     procedure StopVarDump;
@@ -140,6 +147,8 @@ type
     procedure AddQuickText(Search, Replace : string);
     procedure ClearQuickText(Search : string = '');
     function ApplyQuickText(Text : string) : string;
+    procedure AddCP437Text(Search, Replace : string; Mode : Integer = 0);
+    function ApplyCP437Text(Text : string) : string;
 
     property ClientTypes[Index : Integer] : TClientType read GetClientType write SetClientType;
     property ClientCount : Integer read GetClientCount;
@@ -303,6 +312,58 @@ begin
   AddSystemQuickText('~9', '^[0m^[30;47m');
   AddSystemQuickText('~s', '[s');
   AddSystemQuickText('~u', '[u');
+  AddSystemQuickText('~-', '---------------------------------------------------------------------');
+  AddSystemQuickText('~=', '=====================================================================');
+  AddSystemQuickText('~+', '-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-');
+
+  // MB - Create strings for Text to CP437 conversion
+  CP437Mode := 0;
+  CP437Text := Tlist.Create;
+  addCP437Text('/-', #218 + #196);
+  addCP437Text('-\', #196 + #191);
+  addCP437Text('\-', #192 + #196);
+  addCP437Text('-/', #196 + #217);
+  addCP437Text('/=', #201 + #205);
+  addCP437Text('=\', #205 + #187);
+  addCP437Text('\=', #200 + #205);
+  addCP437Text('=/', #205 + #188);
+  addCP437Text('-.-', #196 + #194 + #196, 1);
+  addCP437Text('-+-', #196 + #197 + #196, 1);
+  addCP437Text('-^-', #196 + #193 + #196, 1);
+  addCP437Text('=.=', #205 + #209 + #205, 1);
+  addCP437Text('=+=', #205 + #216 + #205, 1);
+  addCP437Text('=^=', #205 + #207 + #205, 1);
+  addCP437Text('-.-', #196 + #210 + #196, 2);
+  addCP437Text('-+-', #196 + #215 + #196, 2);
+  addCP437Text('-^-', #196 + #208 + #196, 2);
+  addCP437Text('=.=', #205 + #203 + #205, 2);
+  addCP437Text('=+=', #205 + #206 + #205, 2);
+  addCP437Text('=^=', #205 + #202 + #205, 2);
+  addCP437Text('|-', #195 + #196, 1);
+  addCP437Text('-|', #196 + #180, 1);
+  addCP437Text('|=', #198 + #205, 1);
+  addCP437Text('=|', #205 + #181, 1);
+  addCP437Text('|-', #199 + #196, 2);
+  addCP437Text('-|', #196 + #182, 2);
+  addCP437Text('|=', #204 + #205, 2);
+  addCP437Text('=|', #205 + #185, 2);
+  addCP437Text('-- ', #196 + #196 + ' ');
+  addCP437Text('== ', #205 + #205 + ' ');
+  addCP437Text('= ', #254 + ' ');
+  addCP437Text('- ', #255 + ' ');
+  addCP437Text('-=', #255 + #254);
+  addCP437Text('=-', #254 + #255);
+  addCP437Text('-', #196);
+  addCP437Text('=', #205);
+  addCP437Text(#254, '=');
+  addCP437Text(#255, '-');
+
+  // CP437 single line vertical mode
+  addCP437Text('|', #179, 1);
+
+  // CP437 double line vertical mode
+  addCP437Text('|', #186, 2);
+
 end;
 
 procedure TModServer.BeforeDestruction;
@@ -326,6 +387,14 @@ begin
   UserQuickText.Free;
 
   inherited;
+
+  while (CP437Text.Count > 0) do
+  begin
+    TCP437(CP437Text[0]).Free;
+    CP437Text.Delete(0);
+  end;
+  CP437Text.Free;
+
 end;
 
 function TModServer.ApplyQuickText(Text : string) : string;
@@ -334,6 +403,13 @@ var
 begin
     // Store literal Tildes as null
     Text := stringreplace(Text, '~~', chr(255), [rfReplaceAll]);
+
+    // Apply bot specific tagged line
+    if pos('~_', Text) > 0 then
+      Text := stringreplace(Text, '~_',
+      leftstr('---------------------------------------------------------------------',
+      67 - TWXInterpreter.ActiveBotTagLength) + TWXInterpreter.ActiveBotTag + '--', [rfReplaceAll]);
+
 
     // Apply user QuickText strings
     for I := 0 to UserQuickText.Count - 1 do
@@ -354,6 +430,31 @@ begin
 
     // replace "^[" with literal "<esc>[" in result
     result := stringreplace(Text, '^[', chr(27) + '[', [rfReplaceAll]);
+end;
+
+function TModServer.ApplyCP437Text(Text : string) : string;
+var
+  I : Integer;
+begin
+    // Set vertical mode to single or double based on first corner
+    if (pos('/-', Text) > 0) then
+      CP437Mode := 1;
+    if (pos('/=', Text) > 0) then
+      CP437Mode := 2;
+
+    // Convert text strings to CP437
+    for I := 0 to CP437Text.Count - 1 do
+    begin
+      if (CP437Mode < 2) and (TCP437(CP437Text[I]).Mode < 2) then
+        Text := stringreplace(Text, TCP437(CP437Text[I]).Search,
+                TCP437(CP437Text[I]).Replace, [rfReplaceAll])
+      else if (CP437Mode = 2) and ((TCP437(CP437Text[I]).Mode =0) or
+              (TCP437(CP437Text[I]).Mode = 2)) then
+        Text := stringreplace(Text, TCP437(CP437Text[I]).Search,
+                TCP437(CP437Text[I]).Replace, [rfReplaceAll]);
+    end;
+
+    result := Text;
 end;
 
 procedure TModServer.AddSystemQuickText(Search, Replace : string);
@@ -383,6 +484,20 @@ begin
   UserQuickText.Add(NewText);
 end;
 
+procedure TModServer.AddCP437Text(Search, Replace : string; Mode : Integer = 0);
+var
+  NewText : TCP437;
+begin
+  // build new Syhstem QuickText
+  NewText := TCP437.Create;
+  NewText.Search  := Search;
+  NewText.Replace := Replace;
+  NewText.Mode := Mode;
+
+  CP437Text.Add(NewText);
+end;
+
+
 procedure TModServer.ClearQuickText(Search : string = '');
 var
   I : Integer;
@@ -409,7 +524,7 @@ begin
   end;
 end;
 
-procedure TModServer.Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE);
+procedure TModServer.Broadcast(Text : string; AMarkEcho : Boolean = TRUE; BroadcastDeaf : Boolean = FALSE; Buffered : Boolean = FALSE; CP437 : Boolean = FALSE);
 var
   I : Integer;
   Stream : String;
@@ -420,8 +535,11 @@ begin
 
   Text := ApplyQuickText(Text);
 
+  if CP437 = True then
+    Text := ApplyCP437Text(Text);
+
   Stream := Text;
-  for I := 0 to length(Stream) - 1 do
+  for I := 0 to length(Stream) do
   begin
     if (Stream[I] = #27) then
       InAnsi := TRUE;
@@ -596,7 +714,7 @@ begin
    if (RemoteAddress = '127.0.0.1') or
       (AcceptExternal and LocalClient) or
       (AllowLerkers and Lerker) then
-      Socket.SendText(endl + ANSI_13 + 'TWX Proxy Server ' + ANSI_11 + 'v' +
+      Socket.SendText(endl + ANSI_12 + 'TWX Proxy Server ' + ANSI_11 + 'v' +
         ProgramVersion + chr(ReleaseNumber + 96) + ANSI_7 + ' (' + ReleaseVersion + ')' + endl)
    else
    begin
@@ -610,11 +728,21 @@ begin
      exit;
    end;
 
+    try
+      if IniFile.ReadString('TWX Proxy', 'UpdateAvailable', 'False') = 'True' then
+      begin
+        Socket.SendText(endl + ANSI_15 +
+          'An updated verion of TWX Proxy is available. To download please visit: ' + endl +
+          'https://github.com/MicroBlaster/TWXProxy/wiki' + endl + ANSI_7);
+      end;
+    finally
+      IniFile.Free;
+    end;
 
   if (BroadCastMsgs) then
-    Broadcast(endl + ANSI_2 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl + endl)
+    Broadcast(endl + ANSI_13 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl)
   else
-    Socket.SendText(endl + ANSI_2 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl);
+    Socket.SendText(endl + ANSI_13 + 'Active connection detected from: ' + ANSI_14 + RemoteAddress + endl);
 
 
   begin
@@ -622,15 +750,15 @@ begin
     Socket.SendText(#255 + OP_DO + #246);
     FClientEchoMarks[Index] := FALSE;
 
-    if (ReleaseVersion = 'Alpha') then
-      Socket.SendText(ANSI_11 + 'NOTICE: ' + ANSI_13 +
-                      'Alpha releases have not had sufficent testing, and may' + endl +
-                      'be unstable. Please do not distribute, and use at your own risk.' + endl);
+//    if (ReleaseVersion = 'Alpha') then
+//      Socket.SendText(ANSI_11 + 'NOTICE: ' + ANSI_13 +
+//                      'Alpha releases have not had sufficent testing, and may' + endl +
+//                      'be unstable. Please do not distribute, and use at your own risk.' + endl);
 
-    if (ReleaseVersion = 'Beta') then
-      Socket.SendText(endl + ANSI_11 + 'NOTICE: ' + ANSI_13 +
-                      'Beta releases are generally considered stable, but may have' + endl +
-                      'unresolved issues. Use at your own risk.' + endl);
+//    if (ReleaseVersion = 'Beta') then
+//      Socket.SendText(endl + ANSI_11 + 'NOTICE: ' + ANSI_13 +
+//                      'Beta releases are generally considered stable, but may have' + endl +
+//                      'unresolved issues. Use at your own risk.' + endl);
 
     if (AcceptExternal) or (AllowLerkers) then
       Socket.SendText(endl + ANSI_12 + 'WARNING: ' + ANSI_14 +
@@ -638,16 +766,6 @@ begin
                       'you are open to foreign users monitoring data remotely.' + endl);
 
     Socket.SendText(endl);
-    try
-      if IniFile.ReadString('TWX Proxy', 'UpdateAvailable', 'False') = 'True' then
-      begin
-        Socket.SendText(ANSI_15 +
-          'An updated verion of TWX Proxy is available. To download please visit: ' + endl +
-          'https://github.com/MicroBlaster/TWXProxy/wiki' + endl + endl + ANSI_7);
-      end;
-    finally
-      IniFile.Free;
-    end;
 
     if TWXDatabase.DataBaseOpen then
       Socket.SendText(ANSI_10 + 'Using Database ' + ANSI_14 + TWXDatabase.DatabaseName + ANSI_10 + ' w/ ' +
@@ -1148,8 +1266,15 @@ begin
   // manual event - trigger login script
   if (TWXDatabase.DBHeader.UseLogin) then
   begin
-    TWXInterpreter.StopAll(FALSE);
-    TWXInterpreter.Load(FetchScript(TWXGUI.ProgramDir + '\scripts\' + TWXDatabase.DBHeader.LoginScript, FALSE), TRUE);
+    // MB - disable login if specified in TWXP.CFG for active bot, unless running Vid's Login
+    if (TWXInterpreter.ActiveLoginDisabled = False) or (Pos('0_', TWXDatabase.DBHeader.LoginScript) > 0)  then
+    begin
+      TWXInterpreter.StopAll(FALSE);
+      if (Length(TWXInterpreter.ActiveLoginScript) > 0) and (Pos('0_', TWXDatabase.DBHeader.LoginScript) = 0) then
+        TWXInterpreter.Load(FetchScript(TWXGUI.ProgramDir + '\scripts\' + TWXInterpreter.ActiveLoginScript, FALSE), TRUE)
+      else
+        TWXInterpreter.Load(FetchScript(TWXGUI.ProgramDir + '\scripts\' + TWXDatabase.DBHeader.LoginScript, FALSE), TRUE);
+    end;
   end;
 end;
 
@@ -1163,12 +1288,16 @@ begin
   begin
     if (Reconnect) and not (FUserDisconnect) then
     begin
-      if FReconnectDelay < 3 then
-        FReconnectDelay := 3;
+      // MB - disable reconnect if specified in TWXP.CFG for active bot, unless running Vid's Login
+      if (TWXInterpreter.ActiveLoginDisabled = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
+      begin
+        if FReconnectDelay < 3 then
+          FReconnectDelay := 3;
 
-      TWXServer.Broadcast( ANSI_12 +'Connect Canceled. ' + ANSI_10 + 'Reconnecting in ' + ANSI_11 + IntToStr(FReconnectdelay) + ANSI_10 + ' seconds...');
-      tmrReconnect.Enabled := TRUE;
-      FReconnectTock := FReconnectDelay;
+        TWXServer.Broadcast( ANSI_12 +'Connect Canceled. ' + ANSI_10 + 'Reconnecting in ' + ANSI_11 + IntToStr(FReconnectdelay) + ANSI_10 + ' seconds...');
+        tmrReconnect.Enabled := TRUE;
+        FReconnectTock := FReconnectDelay;
+      end;
     end
     else
     begin
@@ -1185,10 +1314,14 @@ begin
     // Reconnect if supposed to
     if (Reconnect) and not (FUserDisconnect) then
     begin
-      TWXServer.Broadcast( endl + endl + ANSI_12 + 'Connection lost.' + ANSI_13 + '(' + ANSI_11 + DateTimeToStr(Now)+ ANSI_13 + ')' + endl);
-      TWXServer.Broadcast( ANSI_10 + 'Reconnecting in ' + ANSI_11 + '3' + ANSI_10 + ' seconds...');
-      tmrReconnect.Enabled := TRUE;
-      FReconnectTock := 3;
+      // MB - disable reconnect if specified in TWXP.CFG for active bot, unless running Vid's Login
+      if (TWXInterpreter.ActiveLoginDisabled = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
+      begin
+        TWXServer.Broadcast( endl + endl + ANSI_12 + 'Connection lost.' + ANSI_13 + '(' + ANSI_11 + DateTimeToStr(Now)+ ANSI_13 + ')' + endl);
+        TWXServer.Broadcast( ANSI_10 + 'Reconnecting in ' + ANSI_11 + '3' + ANSI_10 + ' seconds...');
+        tmrReconnect.Enabled := TRUE;
+        FReconnectTock := 3;
+      end;
     end
     else
     begin
@@ -1249,9 +1382,13 @@ begin
       if FReconnectDelay < 3 then
         FReconnectDelay := 3;
 
-      TWXServer.Broadcast( ANSI_12 +'Failed to Connect. ' + ANSI_10 + 'Reconnecting in ' + ANSI_11 + IntToStr(FReconnectdelay) + ANSI_10 + ' seconds...');
-      tmrReconnect.Enabled := TRUE;
-      FReconnectTock := FReconnectDelay;
+      // MB - disable reconnect if specified in TWXP.CFG for active bot, unless running Vid's Login
+      if (TWXInterpreter.ActiveLoginDisabled = False) or (Pos('0_login', lowercase(TWXDatabase.DBHeader.LoginScript)) > 0)  then
+      begin
+        TWXServer.Broadcast( ANSI_12 +'Failed to Connect. ' + ANSI_10 + 'Reconnecting in ' + ANSI_11 + IntToStr(FReconnectdelay) + ANSI_10 + ' seconds...');
+        tmrReconnect.Enabled := TRUE;
+        FReconnectTock := FReconnectDelay;
+      end;
     end
     else
     begin

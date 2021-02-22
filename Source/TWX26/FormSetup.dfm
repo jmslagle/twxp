@@ -38,6 +38,10 @@ object frmSetup: TfrmSetup
     OnChanging = PageControlChanging
     object tabServer: TTabSheet
       Caption = 'Server'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Panel1: TPanel
         Left = 22
         Top = 79
@@ -243,7 +247,7 @@ object frmSetup: TfrmSetup
         Top = 16
         Width = 209
         Height = 21
-        ItemHeight = 13
+        ItemHeight = 0
         TabOrder = 1
         OnChange = cbGamesChange
       end
@@ -287,6 +291,10 @@ object frmSetup: TfrmSetup
     object tabProgram: TTabSheet
       Caption = 'Program'
       ImageIndex = 4
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object Label11: TLabel
         Left = 16
         Top = 29

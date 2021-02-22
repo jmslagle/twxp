@@ -36,11 +36,10 @@
     <Grid  MouseDown="GridMouseDown">
         <Grid Background="{StaticResource backgroundBrush}" >
             <Image  Source="/TWX3;component/resources/notify00.ico"  Height="24" Width="24" Margin="5,5,0,0" VerticalAlignment="Top" HorizontalAlignment="Left" Grid.RowSpan="2" ></Image>
-            <StackPanel Name="PopupMenu" Margin="10,40,0,0" Width="60" HorizontalAlignment="Left">
-                <Button Name="B1Button" Margin="0,0,0,0"  Height="21" Width="60" Opacity=".5" Click="ConnectButtonClick">Connect</Button>
-                <Button Name="B2Button" Margin="0,0,0,0"  Height="21" Width="60" Opacity=".5" Click="ConnectButtonClick">Connect</Button>
-                <Button Name="B3Button" Margin="0,0,0,0"  Height="21" Width="60" Opacity=".5" Click="ConnectButtonClick">Connect</Button>
-
+            <StackPanel Name="PopupMenu" Margin="5,40,0,0" Width="65" HorizontalAlignment="Left">
+                <Button Name="ScriptsButton" Margin="0,0,0,2"  Height="21" Opacity=".5" Click="ScriptsButtonClick">Scripts</Button>
+                <Button Name="DataButton" Margin="0,0,0,2"  Height="21" Opacity=".5" Click="DataButtonClick">Data</Button>
+                <Button Name="HelpButton" Margin="0,0,0,2"  Height="21" Opacity=".5" Click="HelpButtonClick">Help</Button>
             </StackPanel>
 
             <Grid Visibility="Visible" Name="ServerGrid" Background="{StaticResource BbackgroundBrush2}" Margin="0,26,10,0" VerticalAlignment="Top" HorizontalAlignment="Right" Height="184" Width="311" Opacity=".7"  >
@@ -49,7 +48,7 @@
                 </GroupBox>
             </Grid>
 
-            <Button Name="NewButton" Margin="75,0,0,10" HorizontalAlignment="Left" Width="60" Opacity=".5" Click="ConnectButtonClick" Height="21" VerticalAlignment="Bottom">Connect</Button>
+            <Button Name="ConnectButton" Margin="75,0,0,10" HorizontalAlignment="Left" Width="60" Opacity=".5" Click="ConnectButtonClick" Height="21" VerticalAlignment="Bottom">Connect</Button>
             <Button Name="SettingsButton" Margin="0,0,76,10" VerticalAlignment="Bottom" HorizontalAlignment="Right" Height="21" Width="60" Opacity=".5" Click="SettingsButtonClick">Settings</Button>
             <Button Name="ExitButton" Margin="10" VerticalAlignment="Bottom" HorizontalAlignment="Right" Height="21" Width="60" Opacity=".5" Click="ExitButtonClick">Exit</Button>
         </Grid >

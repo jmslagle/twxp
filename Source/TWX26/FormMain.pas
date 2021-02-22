@@ -319,7 +319,7 @@ begin
       if (searchDir.attr and faDirectory) = faDirectory then
       begin
         // Exclude undesired directories
-        if (pos(Lowercase(searchDir.Name),'.,..,include,mombot,mombot3,quantum,zedbot') = 0) then
+        if (pos(Lowercase(searchDir.Name),'.,..,include,mombot,mombot3,Mombot4p,qubot,zedbot') = 0) then
         begin
           if findfirst(FProgramDir + '\scripts\' + searchDir.Name + '\*', faAnyFile, searchFile) = 0 then
           repeat
@@ -386,7 +386,7 @@ begin
       if (searchDir.attr and faDirectory) = faDirectory then
       begin
         // Exclude undesired directories
-        if (pos(Lowercase(searchDir.Name),'.,..,include,mombot,mombot3,quantum,zedbot') = 0) then
+        if (pos(Lowercase(searchDir.Name),'.,..,include,mombot,mombot3,mombot4p,qubot,zedbot') = 0) then
         begin
           if findfirst(FProgramDir + '\scripts\' + searchDir.Name + '\*', faAnyFile, searchFile) = 0 then
           repeat
@@ -512,7 +512,7 @@ begin
    if (Pos('bot', LowerCase(ExtractFileName(Filename))) > 0) and
       (Pos('switchbot', LowerCase(ExtractFileName(Filename))) = 0)
    then
-     TWXInterpreter.SwitchBot(Filename, True)
+     TWXInterpreter.SwitchBot(Filename, '', True)
    else
      TWXInterpreter.Load(Filename, False);
    end;
@@ -1000,7 +1000,7 @@ begin
   begin
     try
       Update := IniFile.ReadString('TWX Proxy', 'Upgrade', '---');
-      if (Pos(Update, Result) = 0) then
+      if (Pos(Update, Result) = 0) and (Pos('2814.2814', Result) = 0) then
       begin
         IniFile.WriteString('TWX Proxy', 'UpdateAvailable', 'True');
         miUpdateNow.Visible := True;
@@ -1174,7 +1174,7 @@ procedure TfrmMain.OnBotMenuItemClick(Sender: TObject);
 begin
   // MB - Load the new bot. Load has bot detection and
   //      will close all other scripts automatically.
-  TWXInterpreter.SwitchBot(TQuickMenuItem(Sender).ScriptName, True);
+  TWXInterpreter.SwitchBot(TQuickMenuItem(Sender).ScriptName, '', True);
 end;
 
 procedure TfrmMain.OnQuickMenuItemClick(Sender: TObject);
